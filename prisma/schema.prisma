@@ -1,0 +1,212 @@
+// منصة رياضيات - الصفين الأول والثاني الابتدائي - المنهج السعودي 1448
+// SQLite للتطوير/العرض التجريبي. للإنتاج يوصى بالتحويل إلى PostgreSQL (راجع README).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ملاحظة: SQLite لا يدعم الأنواع المعدودة (enum) على مستوى قاعدة البيانات،
+// لذا تُخزَّن هذه الحقول كنصوص وتُفرض القيم المسموحة عبر Zod على مستوى الـ API.
+// القيم المسموحة:
+//   Role: ADMIN | TEACHER | STUDENT
+//   QuestionType: MULTIPLE_CHOICE | TRUE_FALSE | FILL_BLANK | WORD_PROBLEM
+//   DocType: WORKSHEET | QUIZ
+//   SubmissionStatus: PENDING | AUTO_GRADED | MANUAL_GRADED | REVIEWED
+// عند التحويل إلى PostgreSQL للإنتاج يوصى بتحويلها إلى enum حقيقية.
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("TEACHER")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  classesTaught SchoolClass[] @relation("TeacherClasses")
+  worksheets    Worksheet[]   @relation("CreatedWorksheets")
+  gradedWork    Submission[]  @relation("GradedBy")
+  auditLogs     AuditLog[]
+}
+
+model SchoolClass {
+  id        String   @id @default(cuid())
+  name      String // مثال: 1/أ
+  grade     Int // 1 أو 2
+  teacherId String?
+  teacher   User?    @relation("TeacherClasses", fields: [teacherId], references: [id])
+  createdAt DateTime @default(now())
+
+  students    Student[]
+  assignments Assignment[]
+
+  @@unique([name, grade])
+}
+
+model Student {
+  id            String      @id @default(cuid())
+  fullName      String
+  studentNumber String      @unique
+  grade         Int
+  classId       String
+  class         SchoolClass @relation(fields: [classId], references: [id])
+  guardianPhone String?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  submissions Submission[]
+
+  @@index([classId])
+}
+
+model Semester {
+  id        String @id @default(cuid())
+  name      String // الفصل الأول / الفصل الثاني
+  order     Int // 1 أو 2
+  hijriYear String @default("1448")
+
+  units CurriculumUnit[]
+
+  @@unique([order, hijriYear])
+}
+
+model CurriculumUnit {
+  id          String   @id @default(cuid())
+  grade       Int // 1 أو 2
+  semesterId  String
+  semester    Semester @relation(fields: [semesterId], references: [id])
+  order       Int
+  title       String
+  description String?
+  weeksPlan   String? // نص حر لعدد الأسابيع / التقسيم الزمني القابل للتعديل
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lessons    Lesson[]
+  worksheets Worksheet[]
+
+  @@index([grade, semesterId])
+}
+
+model Lesson {
+  id         String         @id @default(cuid())
+  unitId     String
+  unit       CurriculumUnit @relation(fields: [unitId], references: [id])
+  order      Int
+  title      String
+  objectives String?
+
+  @@index([unitId])
+}
+
+model Worksheet {
+  id              String          @id @default(cuid())
+  title           String
+  type            String          @default("WORKSHEET")
+  grade           Int
+  unitId          String?
+  unit            CurriculumUnit? @relation(fields: [unitId], references: [id])
+  createdById     String
+  createdBy       User            @relation("CreatedWorksheets", fields: [createdById], references: [id])
+  durationMinutes Int             @default(20)
+  instructions    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  questions   Question[]
+  assignments Assignment[]
+
+  @@index([createdById])
+}
+
+model Question {
+  id          String    @id @default(cuid())
+  worksheetId String
+  worksheet   Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  order       Int
+  type        String
+  text        String
+  imageUrl    String?
+  optionsJson String? // JSON للاختيارات (اختيار من متعدد)
+  correctJson String // JSON للإجابة الصحيحة (نص، رقم، أو مصفوفة)
+  points      Int       @default(1)
+  autoGrade   Boolean   @default(true)
+
+  answers Answer[]
+
+  @@index([worksheetId])
+}
+
+model Assignment {
+  id          String      @id @default(cuid())
+  worksheetId String
+  worksheet   Worksheet   @relation(fields: [worksheetId], references: [id])
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id])
+  assignedAt  DateTime    @default(now())
+  dueAt       DateTime?
+
+  submissions Submission[]
+
+  @@index([classId])
+  @@index([worksheetId])
+}
+
+model Submission {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id])
+  status       String     @default("PENDING")
+  totalScore   Float?
+  maxScore     Float?
+  gradedById   String?
+  gradedBy     User?      @relation("GradedBy", fields: [gradedById], references: [id])
+  submittedAt  DateTime?
+  gradedAt     DateTime?
+  createdAt    DateTime   @default(now())
+
+  answers Answer[]
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+}
+
+model Answer {
+  id             String     @id @default(cuid())
+  submissionId   String
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question   @relation(fields: [questionId], references: [id])
+  responseJson   String?
+  isCorrect      Boolean?
+  pointsAwarded  Float?
+  manuallyGraded Boolean    @default(false)
+
+  @@unique([submissionId, questionId])
+}
+
+model Setting {
+  key   String @id
+  value String // JSON
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

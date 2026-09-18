@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-primary: #158756;
+  --brand-accent: #f2760c;
+}
+
+html,
+body {
+  background-color: #f6f8f7;
+}
+
+body {
+  font-family: var(--font-tajawal), Tahoma, Arial, sans-serif;
+}
+
+::selection {
+  background-color: var(--brand-primary);
+  color: white;
+}
+
+.card {
+  @apply rounded-xl2 border border-gray-200 bg-white shadow-sm;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-primary {
+  @apply btn bg-brand-600 text-white hover:bg-brand-700;
+}
+
+.btn-secondary {
+  @apply btn bg-gray-100 text-gray-800 hover:bg-gray-200;
+}
+
+.btn-accent {
+  @apply btn bg-accent-500 text-white hover:bg-accent-600;
+}
+
+.btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700;
+}
+
+.input {
+  @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+}
+
+.label {
+  @apply mb-1 block text-sm font-bold text-gray-700;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold;
+}
+
+/* أنماط الطباعة - A4 */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+}
