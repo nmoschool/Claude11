@@ -1,30 +1,47 @@
 // منصة رياضيات - الصفين الأول والثاني الابتدائي - المنهج السعودي 1448
-// SQLite للتطوير/العرض التجريبي. للإنتاج يوصى بالتحويل إلى PostgreSQL (راجع README).
+// PostgreSQL (متوافق مع النشر على بيئات serverless مثل Netlify/Vercel
+// وأيضاً مع الاستضافة الذاتية). راجع README و DEPLOY.md لخطوات الإعداد.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// ملاحظة: SQLite لا يدعم الأنواع المعدودة (enum) على مستوى قاعدة البيانات،
-// لذا تُخزَّن هذه الحقول كنصوص وتُفرض القيم المسموحة عبر Zod على مستوى الـ API.
-// القيم المسموحة:
-//   Role: ADMIN | TEACHER | STUDENT
-//   QuestionType: MULTIPLE_CHOICE | TRUE_FALSE | FILL_BLANK | WORD_PROBLEM
-//   DocType: WORKSHEET | QUIZ
-//   SubmissionStatus: PENDING | AUTO_GRADED | MANUAL_GRADED | REVIEWED
-// عند التحويل إلى PostgreSQL للإنتاج يوصى بتحويلها إلى enum حقيقية.
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  WORD_PROBLEM
+}
+
+enum DocType {
+  WORKSHEET
+  QUIZ
+}
+
+enum SubmissionStatus {
+  PENDING
+  AUTO_GRADED
+  MANUAL_GRADED
+  REVIEWED
+}
 
 model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
   passwordHash String
-  role         String   @default("TEACHER")
+  role         Role     @default(TEACHER)
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -108,7 +125,7 @@ model Lesson {
 model Worksheet {
   id              String          @id @default(cuid())
   title           String
-  type            String          @default("WORKSHEET")
+  type            DocType         @default(WORKSHEET)
   grade           Int
   unitId          String?
   unit            CurriculumUnit? @relation(fields: [unitId], references: [id])
@@ -126,17 +143,17 @@ model Worksheet {
 }
 
 model Question {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   worksheetId String
-  worksheet   Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  worksheet   Worksheet    @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
   order       Int
-  type        String
+  type        QuestionType
   text        String
   imageUrl    String?
   optionsJson String? // JSON للاختيارات (اختيار من متعدد)
   correctJson String // JSON للإجابة الصحيحة (نص، رقم، أو مصفوفة)
-  points      Int       @default(1)
-  autoGrade   Boolean   @default(true)
+  points      Int          @default(1)
+  autoGrade   Boolean      @default(true)
 
   answers Answer[]
 
@@ -159,19 +176,19 @@ model Assignment {
 }
 
 model Submission {
-  id           String     @id @default(cuid())
+  id           String           @id @default(cuid())
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
   studentId    String
-  student      Student    @relation(fields: [studentId], references: [id])
-  status       String     @default("PENDING")
+  student      Student          @relation(fields: [studentId], references: [id])
+  status       SubmissionStatus @default(PENDING)
   totalScore   Float?
   maxScore     Float?
   gradedById   String?
-  gradedBy     User?      @relation("GradedBy", fields: [gradedById], references: [id])
+  gradedBy     User?            @relation("GradedBy", fields: [gradedById], references: [id])
   submittedAt  DateTime?
   gradedAt     DateTime?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime         @default(now())
 
   answers Answer[]
 
