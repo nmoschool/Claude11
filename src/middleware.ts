@@ -1,41 +1,38 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { NextResponse, type NextRequest } from "next/server";
 
-const ADMIN_ONLY = ["/dashboard/admin"];
-const TEACHER_ADMIN_ONLY = [
-  "/dashboard/worksheets",
-  "/dashboard/students",
-  "/dashboard/gradebook",
-];
+/**
+ * الطبقة الأولى من الحماية (المسارات). الصلاحيات الدقيقة ونطاق الفصول
+ * تُفحص في الخادم عبر src/lib/guard.ts لأن الـ middleware لا يصل للقاعدة.
+ */
+const SECURITY_PAGE = "/dashboard/account/security";
 
-export default withAuth(
-  function middleware(req) {
-    const { pathname } = req.nextUrl;
-    const role = req.nextauth.token?.role;
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const valid = !!token?.id && !!token?.kind;
 
-    if (ADMIN_ONLY.some((p) => pathname.startsWith(p)) && role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/dashboard?denied=1", req.url));
+  if (pathname.startsWith("/dashboard")) {
+    if (!valid) return NextResponse.redirect(new URL("/login", req.url));
+    if (token!.kind !== "staff") return NextResponse.redirect(new URL("/student", req.url));
+    if (token!.mfaSetupRequired && !pathname.startsWith(SECURITY_PAGE)) {
+      return NextResponse.redirect(new URL(`${SECURITY_PAGE}?setup=1`, req.url));
     }
-
-    if (
-      TEACHER_ADMIN_ONLY.some((p) => pathname.startsWith(p)) &&
-      role === "STUDENT"
-    ) {
-      return NextResponse.redirect(new URL("/dashboard?denied=1", req.url));
-    }
-
-    return NextResponse.next();
-  },
-  {
-    pages: {
-      signIn: "/login",
-    },
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
   }
-);
+
+  if (pathname.startsWith("/student") && !pathname.startsWith("/student-login")) {
+    if (!valid) return NextResponse.redirect(new URL("/student-login", req.url));
+    if (token!.kind !== "student") return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  const res = NextResponse.next();
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("Permissions-Policy", "camera=(), geolocation=()");
+  return res;
+}
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/student/:path*", "/student-login"],
 };

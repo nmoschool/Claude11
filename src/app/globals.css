@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --brand-primary: #158756;
-  --brand-accent: #f2760c;
+  --brand-primary: #7440e6;
+  --brand-accent: #ec4899;
 }
 
 html,
 body {
-  background-color: #f6f8f7;
+  background-color: #f8f7fc;
 }
 
 body {
@@ -79,4 +79,14 @@ body {
     margin: 0 !important;
     width: 100% !important;
   }
+}
+
+.table {
+  @apply w-full text-sm;
+}
+.table th {
+  @apply bg-gray-50 px-3 py-2 text-right text-xs font-bold text-gray-500;
+}
+.table td {
+  @apply border-t border-gray-100 px-3 py-2;
 }

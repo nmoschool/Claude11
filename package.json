@@ -1,8 +1,8 @@
 {
-  "name": "riyadiyati-1448",
+  "name": "lughati-g4",
   "version": "0.1.0",
   "private": true,
-  "description": "منصة رياضيات للصفين الأول والثاني الابتدائي - المنهج السعودي 1448",
+  "description": "منصة لغتي للصف الرابع الابتدائي (بنات) — المنهج السعودي",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,14 +10,18 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "tsx --test tests/e2e/*.e2e.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
     "next": "15.5.25",
     "next-auth": "^4.24.8",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
@@ -27,6 +31,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.0",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
@@ -40,5 +45,8 @@
     "next": {
       "postcss": "^8.5.28"
     }
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

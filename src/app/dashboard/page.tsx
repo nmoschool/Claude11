@@ -1,100 +1,71 @@
-import { getServerSession } from "next-auth";
 import Link from "next/link";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireStaffPage } from "@/lib/guard";
+import { listClasses } from "@/lib/classes";
+import { PERMISSIONS, ROLE_LABELS, isReadOnlyRole } from "@/lib/permissions";
 
-async function getStats() {
-  const [students, worksheets, classes, gradedSubmissions] = await Promise.all([
-    prisma.student.count({ where: { active: true } }),
-    prisma.worksheet.count(),
-    prisma.schoolClass.count(),
-    prisma.submission.findMany({
-      where: { status: { in: ["AUTO_GRADED", "MANUAL_GRADED", "REVIEWED"] } },
-      select: { totalScore: true, maxScore: true },
-    }),
-  ]);
-
-  const avg =
-    gradedSubmissions.length > 0
-      ? (gradedSubmissions.reduce(
-          (sum, s) => sum + ((s.totalScore ?? 0) / (s.maxScore || 1)) * 100,
-          0
-        ) /
-          gradedSubmissions.length
-        ).toFixed(1)
-      : "—";
-
-  return { students, worksheets, classes, avg };
-}
-
-export default async function DashboardHome() {
-  const session = await getServerSession(authOptions);
-  const stats = await getStats();
-
-  const cards = [
-    { label: "عدد الطلاب", value: stats.students, icon: "🎒", href: "/dashboard/students", color: "bg-brand-50 text-brand-700" },
-    { label: "أوراق العمل/الاختبارات", value: stats.worksheets, icon: "📝", href: "/dashboard/worksheets", color: "bg-accent-50 text-accent-700" },
-    { label: "الفصول", value: stats.classes, icon: "🏫", href: "/dashboard/students", color: "bg-blue-50 text-blue-700" },
-    { label: "متوسط الأداء العام", value: `${stats.avg}${stats.avg !== "—" ? "%" : ""}`, icon: "📈", href: "/dashboard/reports", color: "bg-purple-50 text-purple-700" },
-  ];
+export default async function DashboardHome({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+  const ctx = await requireStaffPage();
+  const { denied } = await searchParams;
+  const classes = ctx.can("students:read") ? await listClasses(ctx) : [];
+  const totalStudents = classes.reduce((s, c) => s + c.studentCount, 0);
+  const withCode = await prisma.student.count({
+    where: { archived: false, pictureCodeHash: { not: null }, class: ctx.classWhere() },
+  });
 
   return (
     <div className="space-y-6">
+      {denied && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">لا تملكين صلاحية الوصول إلى تلك الصفحة.</div>
+      )}
+
       <div>
-        <h1 className="text-xl font-black text-gray-900">لوحة المعلومات</h1>
+        <h1 className="text-2xl font-black">لوحة {ROLE_LABELS[ctx.role]}</h1>
         <p className="text-sm text-gray-500">
-          نظرة عامة سريعة على أداء الفصل والمنصة - الفصل الدراسي الحالي 1448هـ
+          {ctx.schoolWide ? "نطاقك: جميع فصول المدرسة" : `نطاقك: ${classes.length} فصل مسند إليك`}
+          {isReadOnlyRole(ctx.role) && " — عرض فقط دون صلاحيات تعديل"}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Link key={c.label} href={c.href} className="card p-5 transition-shadow hover:shadow-md">
-            <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-xl ${c.color}`}>
-              {c.icon}
-            </div>
-            <div className="text-2xl font-black text-gray-900">{c.value}</div>
-            <div className="text-sm text-gray-500">{c.label}</div>
-          </Link>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="الفصول" value={classes.length} icon="🏫" />
+        <Stat label="الطالبات" value={totalStudents} icon="👧" />
+        <Stat label="طالبات لديهن رمز دخول" value={`${withCode}/${totalStudents}`} icon="🔑" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="card p-5 lg:col-span-2">
-          <h2 className="mb-3 font-bold text-gray-900">إجراءات سريعة</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Link href="/dashboard/worksheets/new" className="btn-primary justify-start">
-              ＋ إنشاء ورقة عمل / اختبار جديد
-            </Link>
-            <Link href="/dashboard/students" className="btn-secondary justify-start">
-              ⭳ استيراد طلاب من Excel
-            </Link>
-            <Link href="/dashboard/curriculum" className="btn-secondary justify-start">
-              🗺️ مراجعة خريطة المنهج
-            </Link>
-            <Link href="/dashboard/reports" className="btn-secondary justify-start">
-              🏆 عرض لوحة الشرف
-            </Link>
+      {classes.length > 0 && (
+        <div className="card p-5">
+          <h2 className="mb-3 font-black">فصولي</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {classes.map((c) => (
+              <Link key={c.id} href={`/dashboard/classes/${c.id}`} className="rounded-lg border border-gray-200 p-4 hover:border-brand-300 hover:bg-brand-50">
+                <div className="font-black">{c.label}</div>
+                <div className="text-sm text-gray-500">{c.studentCount} طالبة · المعلمة: {c.teachers.join("، ") || "—"}</div>
+              </Link>
+            ))}
           </div>
         </div>
+      )}
 
-        <div className="card p-5">
-          <h2 className="mb-3 font-bold text-gray-900">حسابك</h2>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-gray-500">الاسم</dt>
-              <dd className="font-bold">{session?.user.name}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">البريد الإلكتروني</dt>
-              <dd className="font-bold" dir="ltr">{session?.user.email}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">الدور</dt>
-              <dd className="font-bold">{session?.user.role === "ADMIN" ? "مدير النظام" : session?.user.role === "TEACHER" ? "معلم" : "طالب"}</dd>
-            </div>
-          </dl>
+      <details className="card p-5">
+        <summary className="cursor-pointer font-black">صلاحياتي الفعلية ({ctx.perms.size})</summary>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Array.from(ctx.perms).map((p) => (
+            <span key={p} className="badge bg-gray-100 text-gray-700">{PERMISSIONS[p]}</span>
+          ))}
         </div>
+      </details>
+    </div>
+  );
+}
+
+function Stat({ label, value, icon }: { label: string; value: number | string; icon: string }) {
+  return (
+    <div className="card flex items-center gap-4 p-5">
+      <span className="text-3xl">{icon}</span>
+      <div>
+        <div className="text-2xl font-black">{value}</div>
+        <div className="text-sm text-gray-500">{label}</div>
       </div>
     </div>
   );

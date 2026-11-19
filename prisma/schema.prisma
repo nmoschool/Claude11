@@ -1,6 +1,7 @@
-// منصة رياضيات - الصفين الأول والثاني الابتدائي - المنهج السعودي 1448
-// PostgreSQL (متوافق مع النشر على بيئات serverless مثل Netlify/Vercel
-// وأيضاً مع الاستضافة الذاتية). راجع README و DEPLOY.md لخطوات الإعداد.
+// منصة «لغتي» — الصف الرابع الابتدائي (بنات)
+// المخطط الكامل وفق docs/lughati-g4-design.md (القسم 7.2).
+// المرحلة 1 تُفعّل: الهوية والصلاحيات + الهيكل الأكاديمي + الطالبات + التدقيق.
+// بقية الجداول مُنشأة مسبقاً لتجنّب ترحيلات هدّامة في المراحل التالية.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,219 +12,618 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =====================================================================
+// الهوية والصلاحيات
+// =====================================================================
+
 enum Role {
-  ADMIN
+  SUPER_ADMIN
+  SCHOOL_ADMIN
   TEACHER
-  STUDENT
+  SUPERVISOR
+  GUARDIAN
 }
 
-enum QuestionType {
-  MULTIPLE_CHOICE
-  TRUE_FALSE
-  FILL_BLANK
-  WORD_PROBLEM
-}
-
-enum DocType {
-  WORKSHEET
-  QUIZ
-}
-
-enum SubmissionStatus {
-  PENDING
-  AUTO_GRADED
-  MANUAL_GRADED
-  REVIEWED
+model School {
+  id        String         @id @default(cuid())
+  name      String
+  region    String
+  logoUrl   String?
+  createdAt DateTime       @default(now())
+  users     User[]
+  classes   SchoolClass[]
+  years     AcademicYear[]
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
+  schoolId     String
+  school       School    @relation(fields: [schoolId], references: [id])
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
-  role         Role     @default(TEACHER)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         Role
+  active       Boolean   @default(true)
+  totpSecret   String? // مشفّر AES-256-GCM
+  totpEnabled  Boolean   @default(false)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  classesTaught SchoolClass[] @relation("TeacherClasses")
-  worksheets    Worksheet[]   @relation("CreatedWorksheets")
-  gradedWork    Submission[]  @relation("GradedBy")
-  auditLogs     AuditLog[]
+  permissions UserPermission[]
+  classLinks  ClassStaff[]
+  auditLogs   AuditLog[]
+}
+
+/// تخصيص الصلاحيات لمستخدم بعينه: منح (granted=true) أو سحب (granted=false)
+model UserPermission {
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  granted    Boolean
+
+  @@id([userId, permission])
+}
+
+enum StaffRole {
+  TEACHER
+  SUPERVISOR
+}
+
+/// ربط المعلمة/المشرفة بالفصول — يحدد نطاق البيانات المرئية
+model ClassStaff {
+  userId  String
+  classId String
+  role    StaffRole
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class   SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([userId, classId])
+}
+
+// =====================================================================
+// الهيكل الأكاديمي
+// =====================================================================
+
+model AcademicYear {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id])
+  label    String // "1448هـ"
+  current  Boolean @default(false)
+  terms    Term[]
+}
+
+model Term {
+  id        String             @id @default(cuid())
+  yearId    String
+  year      AcademicYear       @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  number    Int
+  title     String
+  startDate DateTime           @db.Date
+  endDate   DateTime           @db.Date
+  weeks     Week[]
+  units     Unit[]
+  holidays  Holiday[]
+  schemes   AssessmentScheme[]
+  assessments Assessment[]
+
+  @@unique([yearId, number])
+}
+
+model Week {
+  id      String   @id @default(cuid())
+  termId  String
+  term    Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+  number  Int
+  start   DateTime @db.Date
+  end     DateTime @db.Date
+  lessons Lesson[]
+
+  @@unique([termId, number])
+}
+
+model Holiday {
+  id     String   @id @default(cuid())
+  termId String
+  term   Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+  title  String
+  start  DateTime @db.Date
+  end    DateTime @db.Date
 }
 
 model SchoolClass {
-  id        String   @id @default(cuid())
-  name      String // مثال: 1/أ
-  grade     Int // 1 أو 2
-  teacherId String?
-  teacher   User?    @relation("TeacherClasses", fields: [teacherId], references: [id])
-  createdAt DateTime @default(now())
+  id       String          @id @default(cuid())
+  schoolId String
+  school   School          @relation(fields: [schoolId], references: [id])
+  grade    Int             @default(4)
+  section  String // "أ"
+  joinCode String          @unique // رمز الفصل لدخول الطالبات
+  students Student[]
+  staff    ClassStaff[]
+  events   CalendarEvent[]
+  gradeItems GradeItem[]
 
-  students    Student[]
-  assignments Assignment[]
-
-  @@unique([name, grade])
+  @@unique([schoolId, grade, section])
 }
 
-model Student {
-  id            String      @id @default(cuid())
-  fullName      String
-  studentNumber String      @unique
-  grade         Int
-  classId       String
-  class         SchoolClass @relation(fields: [classId], references: [id])
-  guardianPhone String?
-  active        Boolean     @default(true)
-  createdAt     DateTime    @default(now())
+// =====================================================================
+// المنهج
+// =====================================================================
 
-  submissions Submission[]
-
-  @@index([classId])
+enum LessonKind {
+  READING
+  LISTENING
+  LEXICAL
+  GRAMMAR
+  SPELLING
+  HANDWRITING
+  WRITING
+  SPEAKING
+  REVIEW
 }
 
-model Semester {
-  id        String @id @default(cuid())
-  name      String // الفصل الأول / الفصل الثاني
-  order     Int // 1 أو 2
-  hijriYear String @default("1448")
-
-  units CurriculumUnit[]
-
-  @@unique([order, hijriYear])
+enum LessonStatus {
+  PLANNED
+  DONE
+  POSTPONED
 }
 
-model CurriculumUnit {
-  id          String   @id @default(cuid())
-  grade       Int // 1 أو 2
-  semesterId  String
-  semester    Semester @relation(fields: [semesterId], references: [id])
-  order       Int
-  title       String
-  description String?
-  weeksPlan   String? // نص حر لعدد الأسابيع / التقسيم الزمني القابل للتعديل
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  lessons    Lesson[]
-  worksheets Worksheet[]
-
-  @@index([grade, semesterId])
+model Unit {
+  id      String   @id @default(cuid())
+  termId  String
+  term    Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+  order   Int
+  title   String
+  lessons Lesson[]
 }
 
 model Lesson {
-  id         String         @id @default(cuid())
+  id         String        @id @default(cuid())
   unitId     String
-  unit       CurriculumUnit @relation(fields: [unitId], references: [id])
+  unit       Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  weekId     String?
+  week       Week?         @relation(fields: [weekId], references: [id])
   order      Int
   title      String
-  objectives String?
-
-  @@index([unitId])
+  kind       LessonKind
+  periods    Int           @default(1)
+  objectives String[]
+  status     LessonStatus  @default(PLANNED)
+  skills     LessonSkill[]
+  vocab      VocabItem[]
+  questions  Question[]
 }
 
-model Worksheet {
-  id              String          @id @default(cuid())
+/// قاموس مهارات لغتي
+model Skill {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  domain    String
+  title     String
+  lessons   LessonSkill[]
+  questions Question[]
+}
+
+model LessonSkill {
+  lessonId String
+  skillId  String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  skill    Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, skillId])
+}
+
+model VocabItem {
+  id       String   @id @default(cuid())
+  lessonId String
+  lesson   Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  word     String
+  meaning  String?
+  antonym  String?
+  plural   String?
+  dual     String?
+  tags     String[]
+  audioUrl String?
+}
+
+enum EventType {
+  LESSON
+  HOMEWORK
+  QUIZ
+  MIDTERM
+  FINAL
+  ACTIVITY
+}
+
+model CalendarEvent {
+  id              String      @id @default(cuid())
+  classId         String
+  class           SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  type            EventType
   title           String
-  type            DocType         @default(WORKSHEET)
-  grade           Int
-  unitId          String?
-  unit            CurriculumUnit? @relation(fields: [unitId], references: [id])
-  createdById     String
-  createdBy       User            @relation("CreatedWorksheets", fields: [createdById], references: [id])
-  durationMinutes Int             @default(20)
-  instructions    String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  date            DateTime
+  lessonId        String?
+  assessmentId    String?
+  rescheduledFrom DateTime?
+}
 
-  questions   Question[]
-  assignments Assignment[]
+// =====================================================================
+// الطالبات
+// =====================================================================
 
-  @@index([createdById])
+model Student {
+  id               String      @id @default(cuid())
+  classId          String
+  class            SchoolClass @relation(fields: [classId], references: [id])
+  fullName         String
+  displayName      String // الاسم الأول الظاهر في شاشة الدخول
+  nationalIdEnc    String? // مشفّر
+  nationalIdLast4  String? // لعرض مُقنَّع
+  birthDate        DateTime?   @db.Date
+  guardianName     String?
+  guardianPhoneEnc String?
+  healthNotesEnc   String?
+  avatar           String      @default("🌸")
+  pictureCodeHash  String? // bcrypt لتسلسل الصور
+  failedLogins     Int         @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  archived         Boolean     @default(false)
+  points           Int         @default(0)
+  createdAt        DateTime    @default(now())
+
+  attendance   Attendance[]
+  behavior     BehaviorRecord[]
+  notes        StudentNote[]
+  files        StudentFile[]
+  grades       GradeEntry[]
+  attempts     Attempt[]
+  gameAttempts GameAttempt[]
+  badges       StudentBadge[]
+  certificates Certificate[]
+
+  @@index([classId])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date       DateTime         @db.Date
+  period     Int              @default(0) // 0 = اليوم كاملاً
+  status     AttendanceStatus
+  note       String?
+  recordedBy String
+
+  @@unique([studentId, date, period])
+}
+
+model BehaviorRecord {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date       DateTime
+  category   String
+  positive   Boolean
+  points     Int      @default(0)
+  note       String?
+  recordedBy String
+}
+
+enum NoteKind {
+  ACADEMIC
+  GUARDIAN_CONTACT
+  REMEDIAL
+  SUPERVISOR
+}
+
+model StudentNote {
+  id                  String   @id @default(cuid())
+  studentId           String
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorId            String
+  kind                NoteKind
+  body                String
+  visibleToSupervisor Boolean  @default(true)
+  createdAt           DateTime @default(now())
+}
+
+model StudentFile {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  storageKey String
+  fileName   String
+  mime       String
+  size       Int
+  category   String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+}
+
+// =====================================================================
+// التقييم والدرجات
+// =====================================================================
+
+enum ComponentKind {
+  PARTICIPATION
+  HOMEWORK
+  PERFORMANCE
+  QUIZ
+  MIDTERM
+  FINAL
+  CUSTOM
+}
+
+model AssessmentScheme {
+  id         String            @id @default(cuid())
+  termId     String
+  term       Term              @relation(fields: [termId], references: [id], onDelete: Cascade)
+  gradeScale Json
+  lockedAt   DateTime?
+  components SchemeComponent[]
+}
+
+model SchemeComponent {
+  id       String           @id @default(cuid())
+  schemeId String
+  scheme   AssessmentScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  kind     ComponentKind
+  title    String
+  weight   Decimal          @db.Decimal(5, 2)
+  items    GradeItem[]
+}
+
+model GradeItem {
+  id           String          @id @default(cuid())
+  componentId  String
+  component    SchemeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  classId      String
+  class        SchoolClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  title        String
+  maxScore     Decimal         @db.Decimal(6, 2)
+  date         DateTime
+  assessmentId String?
+  rubricId     String?
+  skillIds     String[]
+  entries      GradeEntry[]
+}
+
+enum EntryStatus {
+  NORMAL
+  EXCUSED
+  ABSENT
+}
+
+enum EntrySource {
+  MANUAL
+  AUTO
+  GAME
+}
+
+model GradeEntry {
+  id        String      @id @default(cuid())
+  itemId    String
+  item      GradeItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  score     Decimal?    @db.Decimal(6, 2)
+  status    EntryStatus @default(NORMAL)
+  source    EntrySource @default(MANUAL)
+  updatedBy String
+  updatedAt DateTime    @updatedAt
+
+  @@unique([itemId, studentId])
+}
+
+model Rubric {
+  id       String @id @default(cuid())
+  title    String
+  criteria Json
+}
+
+// =====================================================================
+// الأسئلة والاختبارات
+// =====================================================================
+
+enum QType {
+  MCQ
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING
+  CLASSIFY
+  ORDER_WORDS
+  EXTRACT
+  TRANSFORM
+  DICTATION
+  OPEN
+  READING_PASSAGE
+}
+
+enum QStatus {
+  DRAFT
+  APPROVED
 }
 
 model Question {
-  id          String       @id @default(cuid())
-  worksheetId String
-  worksheet   Worksheet    @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
-  order       Int
-  type        QuestionType
-  text        String
-  imageUrl    String?
-  optionsJson String? // JSON للاختيارات (اختيار من متعدد)
-  correctJson String // JSON للإجابة الصحيحة (نص، رقم، أو مصفوفة)
-  points      Int          @default(1)
-  autoGrade   Boolean      @default(true)
-
-  answers Answer[]
-
-  @@index([worksheetId])
+  id         String   @id @default(cuid())
+  lessonId   String?
+  lesson     Lesson?  @relation(fields: [lessonId], references: [id])
+  skillId    String?
+  skill      Skill?   @relation(fields: [skillId], references: [id])
+  type       QType
+  stem       String
+  payload    Json
+  answerKey  Json
+  points     Decimal  @db.Decimal(5, 2)
+  difficulty Int      @default(1)
+  bloom      String?
+  mediaUrl   String?
+  parentId   String?
+  status     QStatus  @default(APPROVED)
+  createdBy  String
+  createdAt  DateTime @default(now())
 }
 
-model Assignment {
-  id          String      @id @default(cuid())
-  worksheetId String
-  worksheet   Worksheet   @relation(fields: [worksheetId], references: [id])
-  classId     String
-  class       SchoolClass @relation(fields: [classId], references: [id])
-  assignedAt  DateTime    @default(now())
-  dueAt       DateTime?
-
-  submissions Submission[]
-
-  @@index([classId])
-  @@index([worksheetId])
+enum AssessmentKind {
+  WORKSHEET
+  QUIZ
+  MIDTERM
+  FINAL
+  GAME_SET
 }
 
-model Submission {
-  id           String           @id @default(cuid())
-  assignmentId String
-  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
-  studentId    String
-  student      Student          @relation(fields: [studentId], references: [id])
-  status       SubmissionStatus @default(PENDING)
-  totalScore   Float?
-  maxScore     Float?
-  gradedById   String?
-  gradedBy     User?            @relation("GradedBy", fields: [gradedById], references: [id])
-  submittedAt  DateTime?
-  gradedAt     DateTime?
-  createdAt    DateTime         @default(now())
-
-  answers Answer[]
-
-  @@unique([assignmentId, studentId])
-  @@index([studentId])
+model Assessment {
+  id          String              @id @default(cuid())
+  kind        AssessmentKind
+  title       String
+  termId      String
+  term        Term                @relation(fields: [termId], references: [id])
+  blueprint   Json?
+  durationMin Int?
+  publishedAt DateTime?
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  versions    AssessmentVersion[]
 }
 
-model Answer {
-  id             String     @id @default(cuid())
-  submissionId   String
-  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  questionId     String
-  question       Question   @relation(fields: [questionId], references: [id])
-  responseJson   String?
-  isCorrect      Boolean?
-  pointsAwarded  Float?
-  manuallyGraded Boolean    @default(false)
-
-  @@unique([submissionId, questionId])
+model AssessmentVersion {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  label        String
+  questionIds  String[]
+  shuffleSeed  Int
+  pdfKey       String?
+  answerPdfKey String?
+  attempts     Attempt[]
 }
 
-model Setting {
-  key   String @id
-  value String // JSON
+model Attempt {
+  id          String            @id @default(cuid())
+  versionId   String
+  version     AssessmentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers     Json
+  autoScore   Decimal?          @db.Decimal(6, 2)
+  finalScore  Decimal?          @db.Decimal(6, 2)
+  perSkill    Json?
+  startedAt   DateTime          @default(now())
+  submittedAt DateTime?
+  gradedBy    String?
 }
+
+// =====================================================================
+// الألعاب والتحفيز
+// =====================================================================
+
+model Game {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  title      String
+  skillCodes String[]
+  config     Json
+  active     Boolean  @default(true)
+}
+
+model GameAssignment {
+  id             String    @id @default(cuid())
+  gameId         String
+  classId        String
+  lessonIds      String[]
+  from           DateTime
+  to             DateTime?
+  countsToGrades Boolean   @default(false)
+}
+
+model GameAttempt {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gameCode  String
+  skillCode String
+  itemRef   String
+  correct   Boolean
+  hintsUsed Int      @default(0)
+  ms        Int
+  level     Int
+  points    Int
+  clientId  String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([skillCode])
+}
+
+model Badge {
+  id     String         @id @default(cuid())
+  code   String         @unique
+  title  String
+  icon   String
+  rule   Json
+  owners StudentBadge[]
+}
+
+model StudentBadge {
+  studentId String
+  badgeId   String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt  DateTime @default(now())
+
+  @@id([studentId, badgeId])
+}
+
+model Certificate {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title      String
+  verifyCode String   @unique
+  pdfKey     String?
+  issuedBy   String
+  issuedAt   DateTime @default(now())
+}
+
+// =====================================================================
+// التدقيق والإشراف
+// =====================================================================
 
 model AuditLog {
   id        String   @id @default(cuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorType String   @default("USER") // USER | STUDENT | SYSTEM
   action    String
   entity    String
   entityId  String?
-  meta      String?
+  before    Json?
+  after     Json?
+  reason    String?
+  ip        String?
   createdAt DateTime @default(now())
 
   @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model SupervisorComment {
+  id         String   @id @default(cuid())
+  authorId   String
+  classId    String
+  targetType String
+  targetId   String
+  body       String
+  createdAt  DateTime @default(now())
 }

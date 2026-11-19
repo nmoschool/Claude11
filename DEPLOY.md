@@ -76,6 +76,9 @@ npm run db:seed    # يضيف خريطة المنهج + حسابات تجريب�
 | `DATABASE_URL` | رابط الاتصال من الخطوة 1 (نفسه) |
 | `NEXTAUTH_SECRET` | نفس القيمة العشوائية التي ولّدتها في الخطوة 2 |
 | `NEXTAUTH_URL` | رابط موقعك على Netlify، مثال: `https://your-site.netlify.app` (يمكن تعديله بعد أول نشر عندما يُنشئ Netlify الرابط) |
+| `FIELD_ENCRYPTION_KEY` | مفتاح تشفير البيانات الحساسة (نفس القيمة المحلية إن عبّأتِ القاعدة محلياً): `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` — احفظي نسخة منه في مكان آمن |
+| `REQUIRE_STAFF_2FA` | `true` |
+| `TRUST_PROXY` | `true` (Netlify يضبط رأس X-Forwarded-For) |
 
 > إن لم تعرف رابط الموقع بعد: انشر أولاً بأي قيمة مؤقتة لـ
 > `NEXTAUTH_URL`، ثم بعد ظهور الرابط الفعلي عدّل المتغير وأعد النشر
