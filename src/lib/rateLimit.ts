@@ -38,3 +38,14 @@ export function clientIp(headers: Headers | Record<string, any> | undefined): st
 export function rateLimitIp(prefix: string, ip: string | null, limit: number, windowMs: number): boolean {
   return ip ? rateLimit(`${prefix}:${ip}`, limit, windowMs) : true;
 }
+
+/**
+ * حدود المعدل لكل IP في الدقيقة. مهم: فصل كامل يخرج غالباً من IP واحد (NAT المدرسة)،
+ * لذلك حدود الطالبات واسعة، والحماية الأساسية من التخمين هي قفل كل حساب على حدة.
+ */
+const num = (v: string | undefined, d: number) => (v && Number(v) > 0 ? Number(v) : d);
+export const LIMITS = {
+  staffLogin: () => num(process.env.RATE_LIMIT_STAFF_LOGIN, 30),
+  studentLogin: () => num(process.env.RATE_LIMIT_STUDENT_LOGIN, 300),
+  roster: () => num(process.env.RATE_LIMIT_ROSTER, 200),
+};

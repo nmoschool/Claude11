@@ -16,6 +16,7 @@ import {
   longestDayStreak,
   scoreBatch,
   LEVELS,
+  type PlayerStats,
 } from "@/lib/gamification";
 
 type StudentRow = { id: string; classId: string; points: number; displayName: string };
@@ -75,9 +76,14 @@ export const AttemptBatch = z.object({
     .max(200),
 });
 
+let badgesReady = false;
 async function ensureBadges() {
+  if (badgesReady) return;
   const existing = await prisma.badge.count();
-  if (existing >= BADGES.length) return;
+  if (existing >= BADGES.length) {
+    badgesReady = true;
+    return;
+  }
   for (const b of BADGES) {
     await prisma.badge.upsert({ where: { code: b.code }, create: { code: b.code, title: b.title, icon: b.icon, rule: { desc: b.desc } }, update: {} });
   }
@@ -142,7 +148,7 @@ export async function syncAttempts(student: StudentRow, raw: unknown) {
     ]);
   }
   const totalPoints = student.points + added;
-  const { newBadges, newCertificates } = await awardRewards(student, levelBefore.index, totalPoints);
+  const { newBadges, newCertificates } = fresh.length ? await awardRewards(student, levelBefore.index, totalPoints) : { newBadges: [], newCertificates: [] };
   return {
     received: attempts.length,
     inserted: fresh.length,
@@ -157,30 +163,55 @@ export async function syncAttempts(student: StudentRow, raw: unknown) {
   };
 }
 
+async function playerStats(studentId: string, need: Set<string>): Promise<PlayerStats> {
+  const base = { studentId, ms: { gte: MIN_MS } };
+  const [total, byPrefix, games] = await Promise.all([
+    prisma.gameAttempt.count({ where: base }),
+    prisma.gameAttempt.groupBy({ by: ["skillCode"], where: { ...base, correct: true }, _count: true }),
+    prisma.gameAttempt.groupBy({ by: ["gameCode"], where: base }),
+  ]);
+  const correctBySkillPrefix: Record<string, number> = {};
+  for (const r of byPrefix) {
+    const pre = r.skillCode.split(".")[0];
+    correctBySkillPrefix[pre] = (correctBySkillPrefix[pre] ?? 0) + r._count;
+  }
+  // السلسلة المتتالية: يكفي آخر 60 محاولة لأن التقييم يجري عند كل مزامنة
+  const recent = need.has("PERFECT_TEN")
+    ? (await prisma.gameAttempt.findMany({ where: base, orderBy: { playedAt: "desc" }, take: 60, select: { correct: true } })).reverse()
+    : [];
+  const days = need.has("PERSISTENT")
+    ? (await prisma.$queryRaw<{ d: string }[]>`SELECT DISTINCT to_char(("playedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Riyadh', 'YYYY-MM-DD') AS d FROM "GameAttempt" WHERE "studentId" = ${studentId} AND ms >= ${MIN_MS}`).map((r) => r.d)
+    : [];
+  let improved: string[] = [];
+  if (need.has("IMPROVER")) {
+    const counts = await prisma.gameAttempt.groupBy({ by: ["skillCode"], where: base, _count: true });
+    const bySkill: Record<string, boolean[]> = {};
+    for (const c of counts.filter((x) => x._count >= 30)) {
+      const [first, last] = await Promise.all([
+        prisma.gameAttempt.findMany({ where: { ...base, skillCode: c.skillCode }, orderBy: { playedAt: "asc" }, take: 20, select: { correct: true } }),
+        prisma.gameAttempt.findMany({ where: { ...base, skillCode: c.skillCode }, orderBy: { playedAt: "desc" }, take: 20, select: { correct: true } }),
+      ]);
+      // تسلسل تمثيلي: أول 20 + 10 وسطية افتراضية + آخر 20 (الدالة تقارن الطرفين فقط)
+      bySkill[c.skillCode] = [...first.map((x) => x.correct), ...Array(10).fill(false), ...last.reverse().map((x) => x.correct)];
+    }
+    improved = improvedSkills(bySkill);
+  }
+  return {
+    totalAttempts: total,
+    correctBySkillPrefix,
+    bestStreak: bestStreak(recent.map((r) => r.correct)),
+    consecutiveDays: longestDayStreak(days),
+    improvedSkills: improved,
+    gamesPlayed: games.length,
+  };
+}
+
 async function awardRewards(student: StudentRow, levelIndexBefore: number, totalPoints: number) {
   await ensureBadges();
   // الإجابات الأسرع من المعقول لا تمنح نقاطاً ولا أوسمة (نفس قاعدة النقاط)
-  const all = await prisma.gameAttempt.findMany({
-    where: { studentId: student.id, ms: { gte: MIN_MS } },
-    orderBy: { playedAt: "asc" },
-    select: { correct: true, skillCode: true, gameCode: true, playedAt: true },
-  });
-  const correctByPrefix: Record<string, number> = {};
-  const bySkill: Record<string, boolean[]> = {};
-  for (const a of all) {
-    const pre = a.skillCode.split(".")[0];
-    if (a.correct) correctByPrefix[pre] = (correctByPrefix[pre] ?? 0) + 1;
-    (bySkill[a.skillCode] ??= []).push(a.correct);
-  }
-  const codes = earnedBadges({
-    totalAttempts: all.length,
-    correctBySkillPrefix: correctByPrefix,
-    bestStreak: bestStreak(all.map((a) => a.correct)),
-    consecutiveDays: longestDayStreak(all.map((a) => riyadhDay(a.playedAt))),
-    improvedSkills: improvedSkills(bySkill),
-    gamesPlayed: new Set(all.map((a) => a.gameCode)).size,
-  });
   const have = new Set((await prisma.studentBadge.findMany({ where: { studentId: student.id }, include: { badge: true } })).map((b) => b.badge.code));
+  const missing = new Set<string>(BADGES.map((b) => b.code).filter((c) => !have.has(c)));
+  const codes = missing.size ? earnedBadges(await playerStats(student.id, missing)) : [];
   const badgeRows = await prisma.badge.findMany({ where: { code: { in: codes.filter((c) => !have.has(c)) } } });
   const newBadges = [];
   const newCertificates = [];
@@ -240,58 +271,69 @@ export async function progress(student: StudentRow) {
   };
 }
 
-/** لوحة أداء الألعاب للمعلمة */
+/** لوحة أداء الألعاب للمعلمة — تجميع داخل قاعدة البيانات (عشرات آلاف المحاولات لكل فصل) */
 export async function gameAnalytics(classId: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   const cls = await prisma.schoolClass.findUniqueOrThrow({ where: { id: classId } });
   const students = await prisma.student.findMany({ where: { classId, archived: false }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true, avatar: true, points: true, _count: { select: { badges: true } } } });
-  const attempts = await prisma.gameAttempt.findMany({ where: { studentId: { in: students.map((s) => s.id) }, playedAt: { gte: since } } });
-  const acc = (xs: { correct: boolean }[]) => (xs.length ? Math.round((xs.filter((x) => x.correct).length / xs.length) * 100) : null);
+  const where = { studentId: { in: students.map((s) => s.id) }, playedAt: { gte: since } };
+  const [byGameRows, bySkillRows, byItemRows, byStudentRows, lastPlayed, playersPerGame] = await Promise.all([
+    prisma.gameAttempt.groupBy({ by: ["gameCode", "correct"], where, _count: true, _sum: { ms: true } }),
+    prisma.gameAttempt.groupBy({ by: ["skillCode", "correct"], where, _count: true }),
+    prisma.gameAttempt.groupBy({ by: ["gameCode", "itemRef", "correct"], where: { ...where, itemRef: { not: "board" } }, _count: true }),
+    prisma.gameAttempt.groupBy({ by: ["studentId", "correct"], where, _count: true, _sum: { ms: true } }),
+    prisma.gameAttempt.groupBy({ by: ["studentId"], where, _max: { playedAt: true } }),
+    prisma.gameAttempt.groupBy({ by: ["gameCode", "studentId"], where }),
+  ]);
+  const acc = (rows: { correct: boolean; _count: number }[]) => {
+    const n = rows.reduce((s, r) => s + r._count, 0);
+    return n ? Math.round((rows.filter((r) => r.correct).reduce((s, r) => s + r._count, 0) / n) * 100) : null;
+  };
+  const count = (rows: { _count: number }[]) => rows.reduce((s, r) => s + r._count, 0);
+  const mins = (rows: { _sum: { ms: number | null } }[]) => Math.round(rows.reduce((s, r) => s + (r._sum.ms ?? 0), 0) / 60000);
 
   const byGame = GAME_CODES.map((g) => {
-    const xs = attempts.filter((a) => a.gameCode === g);
-    return { code: g, title: GAMES[g].title, icon: GAMES[g].icon, enabled: !cls.disabledGames.includes(g), attempts: xs.length, players: new Set(xs.map((x) => x.studentId)).size, accuracy: acc(xs), minutes: Math.round(xs.reduce((s, x) => s + x.ms, 0) / 60000) };
+    const rows = byGameRows.filter((r) => r.gameCode === g);
+    return { code: g, title: GAMES[g].title, icon: GAMES[g].icon, enabled: !cls.disabledGames.includes(g), attempts: count(rows), players: playersPerGame.filter((p) => p.gameCode === g).length, accuracy: acc(rows), minutes: mins(rows) };
   });
-  const skillCodes = Array.from(new Set(attempts.map((a) => a.skillCode)));
+  const skillCodes = Array.from(new Set(bySkillRows.map((r) => r.skillCode)));
   const skills = await prisma.skill.findMany({ where: { code: { in: skillCodes } } });
-  const bySkill = skillCodes.map((code) => {
-    const xs = attempts.filter((a) => a.skillCode === code);
-    return { code, title: skills.find((s) => s.code === code)?.title ?? code, attempts: xs.length, accuracy: acc(xs) };
-  }).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100));
+  const bySkill = skillCodes
+    .map((code) => {
+      const rows = bySkillRows.filter((r) => r.skillCode === code);
+      return { code, title: skills.find((s) => s.code === code)?.title ?? code, attempts: count(rows), accuracy: acc(rows) };
+    })
+    .sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100));
 
   const items = new Map<string, { gameCode: string; itemRef: string; n: number; ok: number }>();
-  for (const a of attempts) {
-    if (a.itemRef === "board") continue;
-    const k = `${a.gameCode}|${a.itemRef}`;
-    const it = items.get(k) ?? { gameCode: a.gameCode, itemRef: a.itemRef, n: 0, ok: 0 };
-    it.n++;
-    if (a.correct) it.ok++;
+  for (const r of byItemRows) {
+    const k = `${r.gameCode}|${r.itemRef}`;
+    const it = items.get(k) ?? { gameCode: r.gameCode, itemRef: r.itemRef, n: 0, ok: 0 };
+    it.n += r._count;
+    if (r.correct) it.ok += r._count;
     items.set(k, it);
   }
-  const vocabIds = [...items.values()].map((i) => i.itemRef.match(/^v:([^:]+)/)?.[1]).filter(Boolean) as string[];
+  const hardestRaw = [...items.values()].filter((i) => i.n >= 3).sort((a, b) => a.ok / a.n - b.ok / b.n).slice(0, 10);
+  const vocabIds = hardestRaw.map((i) => i.itemRef.match(/^v:([^:]+)/)?.[1]).filter(Boolean) as string[];
   const vocab = await prisma.vocabItem.findMany({ where: { id: { in: vocabIds } }, select: { id: true, word: true } });
   const label = (ref: string) => {
     const [kind, rest, extra] = ref.split(":");
     const base = kind === "v" ? vocab.find((v) => v.id === rest)?.word ?? "مفردة" : kind === "s" ? `جملة ${Number(rest) + 1}` : kind === "q" ? "جملة من البنك" : rest;
     return extra ? `${base} (${extra === "dual" ? "مثنى" : "جمع"})` : base;
   };
-  const hardest = [...items.values()]
-    .filter((i) => i.n >= 3)
-    .map((i) => ({ game: GAMES[i.gameCode as GameCode]?.title ?? i.gameCode, item: label(i.itemRef), attempts: i.n, accuracy: Math.round((i.ok / i.n) * 100) }))
-    .sort((a, b) => a.accuracy - b.accuracy)
-    .slice(0, 10);
+  const hardest = hardestRaw.map((i) => ({ game: GAMES[i.gameCode as GameCode]?.title ?? i.gameCode, item: label(i.itemRef), attempts: i.n, accuracy: Math.round((i.ok / i.n) * 100) }));
 
   const studentsOut = students.map((s) => {
-    const xs = attempts.filter((a) => a.studentId === s.id);
-    const last = xs.reduce<Date | null>((m, x) => (!m || x.playedAt > m ? x.playedAt : m), null);
-    return { id: s.id, fullName: s.fullName, avatar: s.avatar, points: s.points, level: levelFor(s.points).title, badges: s._count.badges, attempts: xs.length, accuracy: acc(xs), minutes: Math.round(xs.reduce((m, x) => m + x.ms, 0) / 60000), lastPlayed: last, playedThisWeek: !!last && last >= weekAgo };
+    const rows = byStudentRows.filter((r) => r.studentId === s.id);
+    const last = lastPlayed.find((l) => l.studentId === s.id)?._max.playedAt ?? null;
+    return { id: s.id, fullName: s.fullName, avatar: s.avatar, points: s.points, level: levelFor(s.points).title, badges: s._count.badges, attempts: count(rows), accuracy: acc(rows), minutes: mins(rows), lastPlayed: last, playedThisWeek: !!last && last >= weekAgo };
   });
 
   return {
     class: { id: cls.id, leaderboardVisible: cls.leaderboardVisible, disabledGames: cls.disabledGames },
     days,
-    totals: { attempts: attempts.length, accuracy: acc(attempts), players: new Set(attempts.map((a) => a.studentId)).size, minutes: Math.round(attempts.reduce((s, a) => s + a.ms, 0) / 60000) },
+    totals: { attempts: count(byGameRows), accuracy: acc(byGameRows), players: lastPlayed.length, minutes: mins(byGameRows) },
     byGame,
     bySkill,
     hardest,

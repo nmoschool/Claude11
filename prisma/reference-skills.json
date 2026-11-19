@@ -1,0 +1,112 @@
+[
+  {
+    "code": "READ.ALOUD",
+    "domain": "القراءة",
+    "title": "القراءة الجهرية"
+  },
+  {
+    "code": "READ.COMP",
+    "domain": "القراءة",
+    "title": "الفهم القرائي"
+  },
+  {
+    "code": "LISTEN",
+    "domain": "الاستماع والتحدث",
+    "title": "الاستماع"
+  },
+  {
+    "code": "SPEAK",
+    "domain": "الاستماع والتحدث",
+    "title": "التحدث"
+  },
+  {
+    "code": "SPELL.SHAMS_QAMAR",
+    "domain": "الرسم الإملائي",
+    "title": "اللام الشمسية والقمرية"
+  },
+  {
+    "code": "SPELL.TAA",
+    "domain": "الرسم الإملائي",
+    "title": "التاء المربوطة والمفتوحة"
+  },
+  {
+    "code": "SPELL.HAMZA_START",
+    "domain": "الرسم الإملائي",
+    "title": "همزتا الوصل والقطع"
+  },
+  {
+    "code": "SPELL.ALIF_LAYYINA",
+    "domain": "الرسم الإملائي",
+    "title": "الألف اللينة"
+  },
+  {
+    "code": "SPELL.TANWEEN",
+    "domain": "الرسم الإملائي",
+    "title": "التنوين"
+  },
+  {
+    "code": "HAND.NASKH",
+    "domain": "الرسم الكتابي",
+    "title": "خط النسخ"
+  },
+  {
+    "code": "LEX.NUMBER",
+    "domain": "الصنف اللغوي",
+    "title": "المفرد والمثنى والجمع"
+  },
+  {
+    "code": "LEX.PRONOUN",
+    "domain": "الصنف اللغوي",
+    "title": "الضمائر"
+  },
+  {
+    "code": "LEX.DEMONSTRATIVE",
+    "domain": "الصنف اللغوي",
+    "title": "أسماء الإشارة"
+  },
+  {
+    "code": "LEX.RELATIVE",
+    "domain": "الصنف اللغوي",
+    "title": "الأسماء الموصولة"
+  },
+  {
+    "code": "LEX.VERB_TENSE",
+    "domain": "الصنف اللغوي",
+    "title": "الفعل الماضي والمضارع والأمر"
+  },
+  {
+    "code": "GRAM.NOMINAL",
+    "domain": "الوظيفة النحوية",
+    "title": "الجملة الاسمية (المبتدأ والخبر)"
+  },
+  {
+    "code": "GRAM.VERBAL",
+    "domain": "الوظيفة النحوية",
+    "title": "الجملة الفعلية (الفعل والفاعل)"
+  },
+  {
+    "code": "GRAM.PREP",
+    "domain": "الوظيفة النحوية",
+    "title": "حروف الجر"
+  },
+  {
+    "code": "STYLE.EXCLAIM",
+    "domain": "الأسلوب والتركيب",
+    "title": "أسلوب التعجب"
+  },
+  {
+    "code": "STYLE.QUESTION",
+    "domain": "الأسلوب والتركيب",
+    "title": "أسلوب الاستفهام"
+  },
+  {
+    "code": "STYLE.VOCATIVE",
+    "domain": "الأسلوب والتركيب",
+    "title": "أسلوب النداء"
+  },
+  {
+    "code": "WRITE.EXPR",
+    "domain": "التواصل الكتابي",
+    "title": "التعبير الكتابي"
+  }
+]

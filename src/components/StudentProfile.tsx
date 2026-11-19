@@ -8,7 +8,7 @@ import { BEHAVIOR_CATEGORIES, NOTE_KINDS } from "@/lib/behavior";
 import { FILE_CATEGORIES, type FileCategory } from "@/lib/fileTypes";
 import { formatHijri, formatWeekday, dayKey } from "@/lib/dates";
 
-type Perms = { write: boolean; sensitive: boolean; behavior: boolean; files: boolean; supervisorNote: boolean; isSupervisor: boolean };
+type Perms = { write: boolean; sensitive: boolean; behavior: boolean; files: boolean; supervisorNote: boolean; isSupervisor: boolean; privacy?: boolean };
 
 const TABS = [
   { id: "info", label: "البيانات" },
@@ -56,6 +56,7 @@ export default function StudentProfile({ profile, perms, initialTab }: { profile
       {msg && <div className={`rounded-lg p-3 text-sm ${msg.ok ? "bg-mint-50 text-mint-700" : "bg-red-50 text-red-700"}`} role="status">{msg.text} <button className="mr-2 font-bold" onClick={() => setMsg(null)}>✕</button></div>}
 
       {tab === "info" && <InfoTab s={s} perms={perms} onOk={ok} onErr={err} />}
+      {tab === "info" && perms.privacy && <PrivacyBox s={s} onErr={err} />}
       {tab === "attendance" && <AttendanceTab data={profile.attendance} />}
       {tab === "behavior" && <BehaviorTab id={s.id} data={profile.behavior} canEdit={perms.behavior} onOk={ok} onErr={err} />}
       {tab === "notes" && <NotesTab id={s.id} notes={profile.notes} perms={perms} onOk={ok} onErr={err} />}
@@ -137,7 +138,7 @@ function AttendanceTab({ data }: { data: any }) {
         ))}
         <span className="text-gray-500">· إجمالي الأيام المسجلة: {st.total}</span>
       </div>
-      <div className="flex flex-wrap gap-1" aria-label="خريطة الحضور">
+      <div className="flex flex-wrap gap-1" role="img" aria-label="خريطة الحضور">
         {[...data.records].reverse().map((r: any) => (
           <span key={r.id} title={`${formatWeekday(r.date)} ${formatHijri(r.date)}: ${ATT[r.status as keyof typeof ATT][0]}${r.note ? ` — ${r.note}` : ""}`}
             className={`h-5 w-5 rounded ${ATT[r.status as keyof typeof ATT][1]}`} />
@@ -267,6 +268,31 @@ function FilesTab({ id, files, perms, onOk, onErr }: { id: string; files: any[];
         ))}
         {!files.length && <li className="py-4 text-center text-gray-400">لا ملفات.</li>}
       </ul>
+    </div>
+  );
+}
+
+function PrivacyBox({ s, onErr }: { s: any; onErr: (e: unknown) => void }) {
+  async function erase() {
+    const name = prompt(`حذف نهائي لا يمكن التراجع عنه.\nاكتبي الاسم الكامل للتأكيد:\n${s.fullName}`);
+    if (!name) return;
+    const reason = prompt("سبب الحذف (طلب ولي الأمر، انتقال...):");
+    if (!reason) return;
+    try {
+      await api(`/api/v1/students/${s.id}/erase`, "POST", { confirmName: name, reason });
+      window.location.href = `/dashboard/classes/${s.classId}?archived=1`;
+    } catch (e) {
+      onErr(e);
+    }
+  }
+  return (
+    <div className="card space-y-2 border-dashed p-5">
+      <h3 className="font-black">🔐 حقوق صاحب البيانات (نظام حماية البيانات الشخصية)</h3>
+      <p className="text-sm text-gray-500">للاستجابة لطلب ولي الأمر: تصدير كل بيانات الطالبة، أو حذفها نهائياً بعد أرشفتها.</p>
+      <div className="flex gap-2">
+        <a className="btn-secondary" href={`/api/v1/students/${s.id}/export`}>⬇️ تصدير البيانات (JSON)</a>
+        <button className="btn-danger" disabled={!s.archived} title={s.archived ? "" : "أرشفي الطالبة أولاً"} onClick={erase}>حذف نهائي</button>
+      </div>
     </div>
   );
 }

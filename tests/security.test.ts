@@ -45,3 +45,21 @@ test("رمز الصور: توليد وتحليل", () => {
   assert.equal(parseCode("1-2-3-9"), null);
   assert.match(randomJoinCode(), /^[A-HJ-NP-Z2-9]{6}$/);
 });
+
+import { checkEnv } from "../src/lib/env";
+
+test("فحص البيئة: يرفض أسرار التطوير والمفاتيح الضعيفة في الإنتاج", () => {
+  const good = {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgresql://x",
+    NEXTAUTH_SECRET: "q8Z3vY1n0Wm2Lk5Rt7Pb9Xc4Ds6Fg8Hj",
+    FIELD_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64"),
+    NEXTAUTH_URL: "https://lughati.school.sa",
+  };
+  assert.deepEqual(checkEnv(good), []);
+  const bad = checkEnv({ ...good, NEXTAUTH_SECRET: "dev-secret", FIELD_ENCRYPTION_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", NEXTAUTH_URL: "http://x", REQUIRE_STAFF_2FA: "false" });
+  assert.deepEqual(bad.map((i) => i.key).sort(), ["FIELD_ENCRYPTION_KEY", "NEXTAUTH_SECRET", "NEXTAUTH_URL", "REQUIRE_STAFF_2FA"]);
+  assert.ok(bad.every((i) => i.level === "error"));
+  assert.ok(checkEnv({ ...good, NODE_ENV: "development", NEXTAUTH_SECRET: "x" }).every((i) => i.level === "warn"));
+  assert.ok(checkEnv({ ...good, FILE_STORAGE_DRIVER: "s3" }).some((i) => i.key === "S3_BUCKET"));
+});

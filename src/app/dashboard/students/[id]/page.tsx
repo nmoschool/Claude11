@@ -35,6 +35,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
           files: ctx.can("files:upload", classId),
           supervisorNote: ctx.can("supervision:comment", classId),
           isSupervisor: ctx.role === "SUPERVISOR",
+          privacy: ctx.can("users:manage") && ctx.can("students:sensitive", classId),
         }}
       />
     </div>

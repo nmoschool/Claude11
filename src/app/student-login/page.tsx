@@ -143,7 +143,7 @@ export default function StudentLogin() {
             <div className="mb-4 flex items-center justify-center gap-3 text-2xl font-black">
               <span className="text-4xl">{student.avatar}</span> {student.displayName}
             </div>
-            <div className="mb-6 flex justify-center gap-3" aria-live="polite" aria-label={`اخترتِ ${code.length} من ${CODE_LENGTH}`}>
+            <div className="mb-6 flex justify-center gap-3" role="status" aria-live="polite" aria-label={`اخترتِ ${code.length} من ${CODE_LENGTH}`}>
               {Array.from({ length: CODE_LENGTH }).map((_, i) => (
                 <div key={i} className={`flex h-14 w-14 items-center justify-center rounded-full border-4 text-2xl ${i < code.length ? "border-brand-500 bg-brand-100" : "border-gray-200"}`}>
                   {i < code.length ? "●" : ""}

@@ -25,12 +25,8 @@ export async function middleware(req: NextRequest) {
     if (token!.kind !== "student") return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  const res = NextResponse.next();
-  res.headers.set("X-Frame-Options", "DENY");
-  res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set("Permissions-Policy", "camera=(), geolocation=()");
-  return res;
+  // رؤوس الأمان (CSP, HSTS...) مضبوطة مركزياً في next.config.mjs
+  return NextResponse.next();
 }
 
 export const config = {

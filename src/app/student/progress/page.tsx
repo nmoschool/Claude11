@@ -24,7 +24,7 @@ export default async function ProgressPage() {
           <div className="mt-1 text-xl text-gray-600">{p.points} نقطة</div>
           {L.next && (
             <div className="mx-auto mt-4 max-w-md">
-              <div className="h-4 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={L.progress} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-gradient-to-l from-amber-400 to-accent-500" style={{ width: `${L.progress}%` }} /></div>
+              <div className="h-4 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label="التقدم نحو المستوى التالي" aria-valuenow={L.progress} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-gradient-to-l from-amber-400 to-accent-500" style={{ width: `${L.progress}%` }} /></div>
               <p className="mt-1 text-sm text-gray-500">بقي {L.next.min - p.points} نقطة لتصبحي {L.next.icon} {L.next.title}</p>
             </div>
           )}
@@ -35,7 +35,7 @@ export default async function ProgressPage() {
           <h2 className="mb-3 text-2xl font-black">🎖️ أوسمتي</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {p.badges.map((b) => (
-              <div key={b.code} className={`rounded-2xl border-2 p-3 text-center ${b.earnedAt ? "border-amber-300 bg-amber-50" : "border-dashed border-gray-200 opacity-60"}`}>
+              <div key={b.code} className={`rounded-2xl border-2 p-3 text-center ${b.earnedAt ? "border-amber-300 bg-amber-50" : "border-dashed border-gray-200 bg-gray-50"}`}>
                 <div className={`text-4xl ${b.earnedAt ? "" : "grayscale"}`}>{b.earnedAt ? b.icon : "🔒"}</div>
                 <div className="font-black">{b.title}</div>
                 <div className="text-xs text-gray-500">{b.desc}</div>

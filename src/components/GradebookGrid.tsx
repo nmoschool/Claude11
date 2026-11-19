@@ -269,7 +269,7 @@ export default function GradebookGrid({ initial, classes, terms, skills, perms }
                               onBlur={(e) => { if (!editable) return; if (!commit(r.student.id, it.id, e.currentTarget.value)) e.currentTarget.value = show(cell); }}
                               onKeyDown={(e) => onKey(e, ri, ci)}
                               onPaste={(e) => editable && onPaste(e, ri, ci)}
-                              className={`h-8 w-full min-w-[4.5rem] bg-transparent text-center font-bold outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-brand-400 ${st === "saving" ? "text-gray-400" : ""} ${st === "error" ? "ring-2 ring-inset ring-red-500" : ""} ${cell?.status !== "NORMAL" && cell ? "text-gray-500" : ""}`}
+                              className={`h-8 w-full min-w-[4.5rem] bg-transparent text-center font-bold outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-brand-400 ${st === "saving" ? "text-gray-400" : ""} ${st === "error" ? "ring-2 ring-inset ring-red-500" : ""} ${cell?.status !== "NORMAL" && cell ? "text-gray-700" : ""}`}
                             />
                           </td>
                         );

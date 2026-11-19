@@ -48,23 +48,23 @@ export const PRINT_PATH = /^\/print\/[a-z-]+\/[A-Za-z0-9_-]+(\?[A-Za-z0-9_=&%-]*
 
 export async function renderPdf(path: string, cookieHeader: string, opts: { landscape?: boolean } = {}): Promise<Buffer | null> {
   if (!PRINT_PATH.test(path)) throw new Error("مسار طباعة غير صالح");
-  // العنوان من الإعدادات وليس من رأس Host (منع SSRF/حقن المضيف)
+  // العنوان من الإعدادات وليس من رأس Host (منع SSRF/حقن المضيف).
+  // داخل الحاوية: http://localhost:3000 (وليس 127.0.0.1) لأن Chromium يعدّ localhost سياقاً آمناً
+  // فيقبل كوكي __Secure- للجلسة عبر http الداخلي.
   const base = new URL(process.env.PDF_BASE_URL || process.env.NEXTAUTH_URL || "http://localhost:3000");
   const browser = await launch();
   if (!browser) return null;
   if (active >= MAX_CONCURRENT) throw new Error("BUSY");
   active++;
-  const context = await browser.newContext({ locale: "ar-SA", timezoneId: "Asia/Riyadh" });
+  // نمرّر كوكي الجلسة فقط كترويسة Cookie: Chromium يرفض زرع كوكي ببادئة __Secure- على أصل http
+  // الداخلي عبر CDP، والترويسة لا تخرج عن أصل المنصة (كل طلب آخر يُلغى أدناه)
+  const session = cookieHeader
+    .split(/;\s*/)
+    .filter((c) => /^(__Secure-)?next-auth\.session-token(\.\d+)?=/.test(c))
+    .join("; ");
+  const context = await browser.newContext({ locale: "ar-SA", timezoneId: "Asia/Riyadh", extraHTTPHeaders: session ? { cookie: session } : {} });
   try {
-    const cookies = cookieHeader
-      .split(/;\s*/)
-      .filter(Boolean)
-      .map((c) => {
-        const i = c.indexOf("=");
-        return { name: c.slice(0, i), value: c.slice(i + 1), domain: base.hostname, path: "/", httpOnly: true, secure: base.protocol === "https:", sameSite: "Lax" };
-      })
-      .filter((c) => /next-auth/.test(c.name)); // نمرّر كوكي الجلسة فقط
-    await context.addCookies(cookies);
+    await context.route("**/*", (route: any) => (new URL(route.request().url()).origin === base.origin ? route.continue() : route.abort()));
     const page = await context.newPage();
     const res = await page.goto(new URL(path, base).toString(), { waitUntil: "networkidle", timeout: 30_000 });
     if (!res || res.status() !== 200 || !new URL(page.url()).pathname.startsWith("/print/")) throw new Error("FORBIDDEN");

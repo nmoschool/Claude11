@@ -116,7 +116,7 @@ export default function CurriculumBoard({ initial, terms, skills, canEdit }: { i
             <span className="font-bold">التغطية حتى الأسبوع الحالي</span>
             <span className="font-black">{c.percent}%</span>
           </div>
-          <div className="h-3 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={c.percent} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-3 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label="نسبة تغطية المنهج" aria-valuenow={c.percent} aria-valuemin={0} aria-valuemax={100}>
             <div className={`h-full ${c.percent >= 90 ? "bg-mint-500" : c.percent >= 70 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${c.percent}%` }} />
           </div>
           <p className="mt-1 text-xs text-gray-500">{c.done} منفّذ من {c.due} مخطط حتى الآن{behind > 0 && <b className="text-red-600"> · متأخر {behind} درس</b>}</p>
@@ -145,12 +145,12 @@ export default function CurriculumBoard({ initial, terms, skills, canEdit }: { i
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {items.map((l) => (
                     <button key={l.id} disabled={!canEdit} onClick={() => setEditing(l)}
-                      className={`rounded-lg border-r-4 p-2.5 text-right text-sm transition enabled:hover:shadow ${KIND_COLORS[l.kind]} ${l.status === "DONE" ? "opacity-70" : ""}`}>
+                      className={`rounded-lg border-r-4 p-2.5 text-right text-sm transition enabled:hover:shadow ${KIND_COLORS[l.kind]}`}>
                       <div className="flex items-start gap-1.5 font-bold">
-                        <span aria-label={LESSON_STATUS[l.status]}>{STATUS_ICON[l.status]}</span>
+                        <span role="img" aria-label={LESSON_STATUS[l.status]}>{STATUS_ICON[l.status]}</span>
                         <span>{l.title}</span>
                       </div>
-                      <div className="mt-0.5 text-xs text-gray-500">{LESSON_KINDS[l.kind]} · {l.unitTitle} · {l.periods} حصة</div>
+                      <div className="mt-0.5 text-xs text-gray-600">{LESSON_KINDS[l.kind]} · {l.unitTitle} · {l.periods} حصة</div>
                     </button>
                   ))}
                 </div>

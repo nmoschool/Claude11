@@ -1,0 +1,82 @@
+# نشر كامل على خادم واحد (يفضّل داخل المملكة — انظري docs/operations-runbook.md)
+#   cp deploy/env.production.example deploy/app.env   # ثم املئي القيم
+#   echo "$(openssl rand -base64 48)" > deploy/secrets/backup_passphrase
+#   docker compose up -d --build
+name: lughati
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lughati
+      POSTGRES_USER: lughati
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes: [db_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lughati -d lughati"]
+      interval: 10s
+      retries: 10
+    networks: [internal]
+
+  app:
+    build: .
+    image: lughati:latest
+    restart: unless-stopped
+    env_file: deploy/app.env
+    environment:
+      TRUST_PROXY: "true"
+      PDF_BASE_URL: http://localhost:3000
+      FILE_STORAGE_DIR: /app/.data/uploads
+    depends_on:
+      db: { condition: service_healthy }
+    volumes: [uploads:/app/.data/uploads]
+    networks: [internal]
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?اضبطي DOMAIN في ملف .env بجانب هذا الملف}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+    networks: [internal]
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/deploy/backup-loop.sh"]
+    environment:
+      TZ: Asia/Riyadh
+      BACKUP_DIR: /backups
+      BACKUP_PASSPHRASE_FILE: /run/secrets/backup_passphrase
+      FILE_STORAGE_DIR: /uploads
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      BACKUP_S3_URI: ${BACKUP_S3_URI:-}
+    secrets: [db_password, backup_passphrase]
+    volumes:
+      - ./scripts/backup.sh:/deploy/backup.sh:ro
+      - ./deploy/backup-loop.sh:/deploy/backup-loop.sh:ro
+      - uploads:/uploads:ro
+      - ${BACKUP_HOST_DIR:-./backups}:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+
+secrets:
+  db_password: { file: ./deploy/secrets/db_password }
+  backup_passphrase: { file: ./deploy/secrets/backup_passphrase }
+
+volumes:
+  db_data:
+  uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:

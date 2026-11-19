@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimitIp, clientIp } from "@/lib/rateLimit";
+import { rateLimitIp, clientIp, LIMITS } from "@/lib/rateLimit";
 import { jsonError } from "@/lib/guard";
 
 /** عام: يعرض الاسم الأول والصورة الرمزية فقط لطالبات الفصل صاحب الرمز (لشاشة الدخول) */
 export async function GET(req: Request) {
-  if (!rateLimitIp("roster", clientIp(req.headers), 20, 60_000)) {
+  if (!rateLimitIp("roster", clientIp(req.headers), LIMITS.roster(), 60_000)) {
     return jsonError(429, "RATE_LIMITED", "محاولات كثيرة، انتظري قليلاً");
   }
   const code = new URL(req.url).searchParams.get("code")?.trim().toUpperCase();

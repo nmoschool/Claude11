@@ -1,0 +1,21 @@
+# Caddy: شهادة HTTPS تلقائية (Let's Encrypt) + ضغط + وكيل عكسي
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	# الرؤوس الأمنية (CSP...) تضبطها المنصة؛ HSTS هنا لأن الوكيل هو من ينهي TLS
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+	request_body {
+		max_size 12MB
+	}
+	log {
+		output file /data/access.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+	}
+}

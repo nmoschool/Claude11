@@ -17,30 +17,9 @@ import { randomJoinCode, randomPictureCode, serializeCode, codeToLabels, AVATARS
 
 const prisma = new PrismaClient();
 
-const SKILLS: [string, string, string][] = [
-  ["READ.ALOUD", "القراءة", "القراءة الجهرية"],
-  ["READ.COMP", "القراءة", "الفهم القرائي"],
-  ["LISTEN", "الاستماع والتحدث", "الاستماع"],
-  ["SPEAK", "الاستماع والتحدث", "التحدث"],
-  ["SPELL.SHAMS_QAMAR", "الرسم الإملائي", "اللام الشمسية والقمرية"],
-  ["SPELL.TAA", "الرسم الإملائي", "التاء المربوطة والمفتوحة"],
-  ["SPELL.HAMZA_START", "الرسم الإملائي", "همزتا الوصل والقطع"],
-  ["SPELL.ALIF_LAYYINA", "الرسم الإملائي", "الألف اللينة"],
-  ["SPELL.TANWEEN", "الرسم الإملائي", "التنوين"],
-  ["HAND.NASKH", "الرسم الكتابي", "خط النسخ"],
-  ["LEX.NUMBER", "الصنف اللغوي", "المفرد والمثنى والجمع"],
-  ["LEX.PRONOUN", "الصنف اللغوي", "الضمائر"],
-  ["LEX.DEMONSTRATIVE", "الصنف اللغوي", "أسماء الإشارة"],
-  ["LEX.RELATIVE", "الصنف اللغوي", "الأسماء الموصولة"],
-  ["LEX.VERB_TENSE", "الصنف اللغوي", "الفعل الماضي والمضارع والأمر"],
-  ["GRAM.NOMINAL", "الوظيفة النحوية", "الجملة الاسمية (المبتدأ والخبر)"],
-  ["GRAM.VERBAL", "الوظيفة النحوية", "الجملة الفعلية (الفعل والفاعل)"],
-  ["GRAM.PREP", "الوظيفة النحوية", "حروف الجر"],
-  ["STYLE.EXCLAIM", "الأسلوب والتركيب", "أسلوب التعجب"],
-  ["STYLE.QUESTION", "الأسلوب والتركيب", "أسلوب الاستفهام"],
-  ["STYLE.VOCATIVE", "الأسلوب والتركيب", "أسلوب النداء"],
-  ["WRITE.EXPR", "التواصل الكتابي", "التعبير الكتابي"],
-];
+// قاموس المهارات المرجعي (مشترك مع deploy/setup-year.cjs للإنتاج)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SKILLS: [string, string, string][] = (require("./reference-skills.json") as { code: string; domain: string; title: string }[]).map((s) => [s.code, s.domain, s.title]);
 
 // أسماء تجريبية عامة (ليست لأشخاص حقيقيين)
 const FIRST = ["سارة", "نورة", "ريم", "لمى", "جود", "رهف", "شهد", "لين", "غلا", "ديم", "تالا", "رزان", "جنى", "وعد", "ليان", "مها", "هيا", "دانة", "أسيل", "رغد", "سلمى", "ملاك", "يارا", "لجين", "ميار", "عهد", "بشرى", "آلاء", "حلا", "روان", "شوق", "فجر", "نجد", "مريم", "هتان", "جوري"];

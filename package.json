@@ -14,7 +14,13 @@
     "db:studio": "prisma studio",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "tsx --test --test-concurrency=1 tests/e2e/*.e2e.ts"
+    "test:e2e": "tsx --test --test-concurrency=1 tests/e2e/*.e2e.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "check:env": "tsx scripts/check-env.ts",
+    "test:a11y": "node scripts/a11y-audit.cjs",
+    "test:load": "tsx scripts/load-test.ts",
+    "backup": "bash scripts/backup.sh daily"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1172.0",
@@ -37,6 +43,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
+    "axe-core": "^4.10.2",
     "postcss": "^8.5.28",
     "prisma": "^5.20.0",
     "tailwindcss": "^3.4.13",

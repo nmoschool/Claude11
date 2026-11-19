@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { decryptField } from "@/lib/crypto";
 import { verifyTotp } from "@/lib/totp";
-import { rateLimitIp, clientIp } from "@/lib/rateLimit";
+import { rateLimitIp, clientIp, LIMITS } from "@/lib/rateLimit";
 import { audit } from "@/lib/audit";
 import {
   parseCode,
@@ -41,7 +41,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         const ip = clientIp(req?.headers as any);
-        if (!rateLimitIp("login", ip, 10, 60_000)) throw new Error("RATE_LIMITED");
+        if (!rateLimitIp("login", ip, LIMITS.staffLogin(), 60_000)) throw new Error("RATE_LIMITED");
 
         const email = credentials?.email?.trim().toLowerCase();
         const password = credentials?.password ?? "";
@@ -106,7 +106,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         const ip = clientIp(req?.headers as any);
-        if (!rateLimitIp("student-login", ip, 30, 60_000)) throw new Error("RATE_LIMITED");
+        if (!rateLimitIp("student-login", ip, LIMITS.studentLogin(), 60_000)) throw new Error("RATE_LIMITED");
 
         const classCode = credentials?.classCode?.trim().toUpperCase();
         const code = parseCode(credentials?.code ?? "");

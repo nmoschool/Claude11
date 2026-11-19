@@ -140,7 +140,7 @@ export default function GamePlayer({ studentId, code }: { studentId: string; cod
     <Shell code={code}>
       <div className="mb-4 flex items-center justify-between rounded-2xl bg-white/80 px-4 py-2">
         <span className="font-bold">الجولة {roundNo + 1} / {ROUNDS_PER_SESSION}</span>
-        <span className="flex gap-1" aria-label="التقدم">{Array.from({ length: ROUNDS_PER_SESSION }).map((_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < roundNo ? "bg-brand-500" : i === roundNo ? "bg-accent-500" : "bg-gray-200"}`} />)}</span>
+        <span className="flex gap-1" role="img" aria-label={`الجولة ${roundNo + 1} من ${ROUNDS_PER_SESSION}`}>{Array.from({ length: ROUNDS_PER_SESSION }).map((_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < roundNo ? "bg-brand-500" : i === roundNo ? "bg-accent-500" : "bg-gray-200"}`} />)}</span>
         <span className="rounded-full bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">المستوى: {LEVEL_NAMES[level]}</span>
       </div>
       {levelUp && <div className="mb-3 animate-bounce rounded-2xl bg-amber-100 p-3 text-center text-xl font-black text-amber-800">🚀 انتقلتِ إلى مستوى أعلى!</div>}

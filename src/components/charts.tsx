@@ -82,9 +82,9 @@ export function DistributionBars({ data, title }: { data: { label: string; count
 
 // تدرّج لون واحد فاتح ← داكن (أعلى إتقان = أدكن)
 const STEPS = [
-  { min: 90, bg: "#5029a3", fg: "#ffffff" },
-  { min: 80, bg: "#6230c9", fg: "#ffffff" },
-  { min: 70, bg: "#8b5cf6", fg: "#ffffff" },
+  { min: 90, bg: "#432584", fg: "#ffffff" },
+  { min: 80, bg: "#5029a3", fg: "#ffffff" },
+  { min: 70, bg: "#6230c9", fg: "#ffffff" },
   { min: 60, bg: "#c4b2fe", fg: "#1f2937" },
   { min: 50, bg: "#ddd3ff", fg: "#1f2937" },
   { min: 0, bg: "#f6f3ff", fg: "#1f2937" },

@@ -39,7 +39,7 @@ body {
 }
 
 .btn-accent {
-  @apply btn bg-accent-500 text-white hover:bg-accent-600;
+  @apply btn bg-accent-700 text-white hover:bg-accent-800;
 }
 
 .btn-danger {
