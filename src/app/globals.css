@@ -93,3 +93,21 @@ body {
   }
 }
 
+
+/* قوالب /print */
+@media print {
+  .print-landscape {
+    size: A4 landscape;
+  }
+}
+.print-sheet table {
+  break-inside: auto;
+}
+.print-sheet tr,
+.print-sheet figure,
+.print-sheet h2 {
+  break-inside: avoid;
+}
+.print-sheet h2 {
+  break-after: avoid;
+}

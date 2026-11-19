@@ -262,6 +262,80 @@ async function main() {
     data: aStudents.slice(0, 4).map((s, i) => ({ studentId: s.id, date: addDays(-i - 1), category: i === 3 ? "نظام وانضباط" : "مشاركة", positive: i !== 3, points: i === 3 ? 1 : 2, recordedBy: teacher.id })),
   });
 
+  // ---------- مخطط التقييم + درجات نموذجية لفصلي 4/أ و4/ب (الفصل الأول) ----------
+  const DEFAULT_SCALE = [
+    { min: 90, label: "ممتاز" },
+    { min: 80, label: "جيد جداً" },
+    { min: 70, label: "جيد" },
+    { min: 50, label: "مقبول" },
+    { min: 0, label: "يحتاج إلى دعم" },
+  ];
+  const COMPONENTS = [
+    { kind: "PARTICIPATION", title: "المشاركة والتفاعل الصفي", weight: 10 },
+    { kind: "HOMEWORK", title: "الواجبات", weight: 10 },
+    { kind: "PERFORMANCE", title: "المهام الأدائية", weight: 20 },
+    { kind: "QUIZ", title: "الاختبارات القصيرة", weight: 20 },
+    { kind: "MIDTERM", title: "الاختبار الفتري", weight: 10 },
+    { kind: "FINAL", title: "الاختبار النهائي", weight: 30 },
+  ] as const;
+  for (const t of await prisma.term.findMany({ where: { yearId: year.id } })) {
+    await prisma.assessmentScheme.create({
+      data: { termId: t.id, gradeScale: DEFAULT_SCALE, components: { create: COMPONENTS.map((c, i) => ({ ...c, order: i + 1 })) } },
+    });
+  }
+  const scheme1 = await prisma.assessmentScheme.findFirstOrThrow({ where: { termId: term1.id }, include: { components: true } });
+  const comp = (k: string) => scheme1.components.find((c) => c.kind === k)!.id;
+  const ITEMS: { k: string; title: string; max: number; week: number; skills: string[] }[] = [
+    { k: "PARTICIPATION", title: "مشاركة — الشهر الأول", max: 5, week: 4, skills: ["SPEAK"] },
+    { k: "PARTICIPATION", title: "مشاركة — الشهر الثاني", max: 5, week: 8, skills: ["SPEAK"] },
+    { k: "HOMEWORK", title: "واجب 1", max: 10, week: 2, skills: [] },
+    { k: "HOMEWORK", title: "واجب 2", max: 10, week: 5, skills: [] },
+    { k: "HOMEWORK", title: "واجب 3", max: 10, week: 10, skills: [] },
+    { k: "PERFORMANCE", title: "قراءة جهرية — الوحدة 1", max: 10, week: 4, skills: ["READ.ALOUD"] },
+    { k: "PERFORMANCE", title: "تعبير كتابي", max: 10, week: 7, skills: ["WRITE.EXPR"] },
+    { k: "QUIZ", title: "قصير 1: اللام الشمسية والقمرية", max: 10, week: 3, skills: ["SPELL.SHAMS_QAMAR"] },
+    { k: "QUIZ", title: "قصير 2: الضمائر", max: 10, week: 5, skills: ["LEX.PRONOUN"] },
+    { k: "QUIZ", title: "قصير 3: التاء المربوطة والمفتوحة", max: 10, week: 8, skills: ["SPELL.TAA"] },
+    { k: "QUIZ", title: "قصير 4: الجملة الاسمية", max: 10, week: 11, skills: ["GRAM.NOMINAL"] },
+    { k: "MIDTERM", title: "الاختبار الفتري", max: 40, week: 10, skills: ["READ.COMP", "LEX.NUMBER", "GRAM.NOMINAL"] },
+  ];
+  // مولّد شبه عشوائي حتمي (نفس النتائج في كل تعبئة)
+  let seedN = 1448;
+  const rnd = () => ((seedN = (seedN * 16807) % 2147483647) / 2147483647);
+  for (const cls of [A, B]) {
+    const studs = await prisma.student.findMany({ where: { classId: cls.id }, orderBy: { fullName: "asc" } });
+    const ability = studs.map((_, i) => 0.42 + ((i * 37) % 55) / 100); // 0.42 .. 0.96
+    for (const it of ITEMS) {
+      const item = await prisma.gradeItem.create({
+        data: {
+          classId: cls.id,
+          termId: term1.id,
+          componentId: comp(it.k),
+          title: it.title,
+          maxScore: it.max,
+          date: new Date(w(it.week).start.getTime() + 2 * 86_400_000),
+          skillIds: it.skills.map((c) => skillId[c]),
+          createdBy: teacher.id,
+        },
+      });
+      await prisma.gradeEntry.createMany({
+        data: studs.map((st, i) => {
+          const weakTaa = it.skills.includes("SPELL.TAA") && i % 4 === 1 ? -0.3 : 0;
+          const r = Math.min(1, Math.max(0, ability[i] + weakTaa + (rnd() - 0.5) * 0.25));
+          const absent = (i === 2 && it.k === "HOMEWORK" && it.title.endsWith("3")) || (i === 7 && it.title.startsWith("قصير 2"));
+          const excused = i === 5 && it.k === "MIDTERM";
+          return {
+            itemId: item.id,
+            studentId: st.id,
+            score: absent || excused ? null : Math.round(r * it.max * 2) / 2,
+            status: absent ? "ABSENT" : excused ? "EXCUSED" : "NORMAL",
+            updatedBy: teacher.id,
+          } as const;
+        }),
+      });
+    }
+  }
+
   console.log("✅ تمت التعبئة\n");
   console.log("حسابات الطاقم (سيُطلب تفعيل التحقق الثنائي عند أول دخول):");
   for (const a of accounts) console.log(`  ${a.name.padEnd(28)} ${a.email.padEnd(24)} ${a.password}`);

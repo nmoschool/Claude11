@@ -377,9 +377,10 @@ model AssessmentScheme {
   id         String            @id @default(cuid())
   termId     String
   term       Term              @relation(fields: [termId], references: [id], onDelete: Cascade)
-  gradeScale Json
-  lockedAt   DateTime?
-  components SchemeComponent[]
+  gradeScale   Json
+  absentAsZero Boolean           @default(true)
+  lockedAt     DateTime?
+  components   SchemeComponent[]
 }
 
 model SchemeComponent {
@@ -388,12 +389,14 @@ model SchemeComponent {
   scheme   AssessmentScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
   kind     ComponentKind
   title    String
+  order    Int              @default(0)
   weight   Decimal          @db.Decimal(5, 2)
   items    GradeItem[]
 }
 
 model GradeItem {
   id           String          @id @default(cuid())
+  termId       String
   componentId  String
   component    SchemeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
   classId      String
@@ -404,7 +407,20 @@ model GradeItem {
   assessmentId String?
   rubricId     String?
   skillIds     String[]
+  createdBy    String?
   entries      GradeEntry[]
+
+  @@index([classId, termId])
+}
+
+/// اعتماد (قفل) درجات فصل في فصل دراسي — بعده يلزم سبب لأي تعديل ويُسجَّل
+model GradeLock {
+  classId  String
+  termId   String
+  lockedAt DateTime @default(now())
+  lockedBy String
+
+  @@id([classId, termId])
 }
 
 enum EntryStatus {

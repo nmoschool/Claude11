@@ -72,8 +72,10 @@ export function absenceStreak(records: { date: Date; status: string }[]): number
 }
 
 export function attendanceStats(records: { date: Date; status: string }[]) {
-  const c = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 } as Record<string, number>;
-  records.forEach((r) => (c[r.status] = (c[r.status] ?? 0) + 1));
+  const c = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 };
+  records.forEach((r) => {
+    if (r.status in c) c[r.status as keyof typeof c]++;
+  });
   const total = records.length;
   return {
     total,

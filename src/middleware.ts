@@ -12,7 +12,7 @@ export async function middleware(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const valid = !!token?.id && !!token?.kind;
 
-  if (pathname.startsWith("/dashboard")) {
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/print")) {
     if (!valid) return NextResponse.redirect(new URL("/login", req.url));
     if (token!.kind !== "staff") return NextResponse.redirect(new URL("/student", req.url));
     if (token!.mfaSetupRequired && !pathname.startsWith(SECURITY_PAGE)) {
@@ -34,5 +34,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/student/:path*", "/student-login"],
+  matcher: ["/dashboard/:path*", "/print/:path*", "/student/:path*", "/student-login"],
 };
