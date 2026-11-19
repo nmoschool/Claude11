@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "crypto";
 
 /**
  * تشفير الحقول الحساسة على مستوى التطبيق (AES-256-GCM).
@@ -41,8 +41,17 @@ export function decryptOptional(v: string | null | undefined): string | null {
   return v ? decryptField(v) : null;
 }
 
-/** إقناع رقم الهوية للعرض: 1•••••••89 */
+/** إقناع رقم الهوية للعرض: آخر 4 أرقام فقط ••••••7890 (المخزَّن غير المشفّر هو آخر 4 فقط) */
 export function maskId(last4: string | null | undefined): string {
   if (!last4) return "—";
-  return `${last4.slice(0, 1)}•••••••${last4.slice(-2)}`;
+  return `••••••${last4.slice(-4)}`;
+}
+
+/**
+ * بصمة حتمية لرقم الهوية (HMAC-SHA256) للبحث ومنع التكرار؛ التشفير العشوائي
+ * (AES-GCM) لا يصلح للبحث لأن ناتجه يختلف في كل مرة.
+ */
+export function hashNationalId(id: string): string {
+  const subKey = createHmac("sha256", key()).update("lughati/national-id-index/v1").digest();
+  return createHmac("sha256", subKey).update(id.trim()).digest("hex");
 }

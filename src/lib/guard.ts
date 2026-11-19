@@ -122,7 +122,7 @@ export function jsonError(status: number, code: string, message: string) {
  * المصادقة ← 2FA ← الصلاحية ← قيد القراءة فقط للمشرفة ← التنفيذ ← معالجة الأخطاء
  */
 export function withPermission<P = Record<string, string>>(
-  perm: Permission | null,
+  perm: Permission | Permission[] | null,
   handler: Handler<P>,
   opts: ApiOptions = {}
 ) {
@@ -136,7 +136,10 @@ export function withPermission<P = Record<string, string>>(
       if (ctx.mfaSetupRequired && !opts.selfService) {
         return jsonError(403, "MFA_SETUP_REQUIRED", "يجب تفعيل التحقق الثنائي أولاً");
       }
-      if (perm && !ctx.perms.has(perm)) {
+      // مصفوفة = تكفي أيٌّ منها (ويتحقق المعالج من التفصيل)
+      const required = perm === null ? [] : Array.isArray(perm) ? perm : [perm];
+      const held = required.filter((p) => ctx.perms.has(p));
+      if (required.length && !held.length) {
         return jsonError(403, "FORBIDDEN", "لا تملكين صلاحية تنفيذ هذا الإجراء");
       }
       // طبقة دفاع إضافية: المشرفة لا تنفّذ أي عملية كتابة خارج قناة الملاحظات الإشرافية
@@ -144,7 +147,7 @@ export function withPermission<P = Record<string, string>>(
         ctx.role === "SUPERVISOR" &&
         req.method !== "GET" &&
         !opts.selfService &&
-        !(perm && SUPERVISOR_WRITABLE.includes(perm))
+        !held.some((p) => SUPERVISOR_WRITABLE.includes(p))
       ) {
         return jsonError(403, "READ_ONLY", "حساب المشرفة للقراءة فقط");
       }

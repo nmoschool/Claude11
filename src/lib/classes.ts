@@ -25,10 +25,10 @@ export async function listClasses(ctx: StaffContext) {
   }));
 }
 
-export async function listStudents(ctx: StaffContext, classId: string) {
+export async function listStudents(ctx: StaffContext, classId: string, opts: { archived?: boolean } = {}) {
   const sensitive = ctx.can("students:sensitive", classId);
   const students = await prisma.student.findMany({
-    where: { classId, archived: false },
+    where: { classId, archived: opts.archived ?? false },
     orderBy: { fullName: "asc" },
   });
   return students.map((s) => ({

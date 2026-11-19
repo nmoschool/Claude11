@@ -79,6 +79,8 @@ npm run db:seed    # يضيف خريطة المنهج + حسابات تجريب�
 | `FIELD_ENCRYPTION_KEY` | مفتاح تشفير البيانات الحساسة (نفس القيمة المحلية إن عبّأتِ القاعدة محلياً): `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` — احفظي نسخة منه في مكان آمن |
 | `REQUIRE_STAFF_2FA` | `true` |
 | `TRUST_PROXY` | `true` (Netlify يضبط رأس X-Forwarded-For) |
+| `FILE_STORAGE_DRIVER` | `s3` — Netlify بلا قرص دائم، فالملفات المرفوعة تضيع بدونه |
+| `S3_BUCKET` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | حاوية **خاصة** (غير عامة) لملفات الطالبات؛ و`S3_ENDPOINT` لغير AWS |
 
 > إن لم تعرف رابط الموقع بعد: انشر أولاً بأي قيمة مؤقتة لـ
 > `NEXTAUTH_URL`، ثم بعد ظهور الرابط الفعلي عدّل المتغير وأعد النشر

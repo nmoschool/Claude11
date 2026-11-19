@@ -14,19 +14,21 @@
     "db:studio": "prisma studio",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "tsx --test tests/e2e/*.e2e.ts"
+    "test:e2e": "tsx --test --test-concurrency=1 tests/e2e/*.e2e.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1172.0",
+    "@aws-sdk/s3-request-presigner": "^3.1172.0",
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
-    "next": "15.5.25",
+    "exceljs": "^4.4.0",
+    "next": "^15.5.29",
     "next-auth": "^4.24.8",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
-    "xlsx": "^0.18.5",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -44,6 +46,9 @@
   "overrides": {
     "next": {
       "postcss": "^8.5.28"
+    },
+    "exceljs": {
+      "uuid": "^11.1.1"
     }
   },
   "prisma": {

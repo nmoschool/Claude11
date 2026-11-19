@@ -33,7 +33,7 @@ test("تشفير الحقول: ذهاب وإياب، ونص مشفّر مختل�
 });
 
 test("إقناع الهوية", () => {
-  assert.equal(maskId("5432"), "5•••••••32");
+  assert.equal(maskId("5432"), "••••••5432");
   assert.equal(maskId(null), "—");
 });
 

@@ -4,9 +4,9 @@
  *
  * التواريخ وأسماء الطالبات تجريبية؛ عدّلي تواريخ الفصول وفق التقويم الدراسي الرسمي.
  */
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient, Role, type LessonKind } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { encryptField } from "../src/lib/crypto";
+import { encryptField, hashNationalId } from "../src/lib/crypto";
 import { randomJoinCode, randomPictureCode, serializeCode, codeToLabels, AVATARS } from "../src/lib/pictureCode";
 
 const prisma = new PrismaClient();
@@ -92,6 +92,78 @@ async function main() {
   }
 
   await prisma.skill.createMany({ data: SKILLS.map(([code, domain, title]) => ({ code, domain, title })) });
+  const skillId = Object.fromEntries((await prisma.skill.findMany()).map((s) => [s.code, s.id]));
+
+  // ---------- توزيع نموذجي للفصل الأول (يُستبدل بالتوزيع الرسمي عبر «استيراد من Excel») ----------
+  const term1 = await prisma.term.findFirstOrThrow({ where: { yearId: year.id, number: 1 }, include: { weeks: { orderBy: { number: "asc" } } } });
+  const w = (n: number) => term1.weeks[n - 1];
+  await prisma.holiday.create({ data: { termId: term1.id, title: "اليوم الوطني", start: new Date("2026-09-23T00:00:00Z"), end: new Date("2026-09-23T00:00:00Z") } });
+  await prisma.holiday.create({ data: { termId: term1.id, title: "إجازة (مثال — عدّليها وفق التقويم الرسمي)", start: w(9).start, end: w(9).end } });
+
+  const UNIT_PLAN: { title: string; lessons: [string, LessonKind, string[]][] }[] = [
+    {
+      title: "الوحدة الأولى (نموذج)",
+      lessons: [
+        ["نص الاستماع", "LISTENING", ["LISTEN"]],
+        ["نص الفهم القرائي الأول", "READING", ["READ.ALOUD", "READ.COMP"]],
+        ["الصنف اللغوي: الضمائر المنفصلة", "LEXICAL", ["LEX.PRONOUN"]],
+        ["الأسلوب اللغوي: النداء", "GRAMMAR", ["STYLE.VOCATIVE"]],
+        ["الرسم الإملائي: اللام الشمسية والقمرية", "SPELLING", ["SPELL.SHAMS_QAMAR"]],
+        ["الرسم الكتابي: خط النسخ", "HANDWRITING", ["HAND.NASKH"]],
+        ["التواصل الكتابي", "WRITING", ["WRITE.EXPR"]],
+        ["التواصل الشفهي", "SPEAKING", ["SPEAK"]],
+      ],
+    },
+    {
+      title: "الوحدة الثانية (نموذج)",
+      lessons: [
+        ["نص الفهم القرائي الثاني", "READING", ["READ.COMP"]],
+        ["الصنف اللغوي: المفرد والمثنى والجمع", "LEXICAL", ["LEX.NUMBER"]],
+        ["الوظيفة النحوية: الجملة الاسمية", "GRAMMAR", ["GRAM.NOMINAL"]],
+        ["الرسم الإملائي: التاء المربوطة والمفتوحة", "SPELLING", ["SPELL.TAA"]],
+        ["الرسم الكتابي: حروف متشابهة", "HANDWRITING", ["HAND.NASKH"]],
+        ["التواصل الكتابي", "WRITING", ["WRITE.EXPR"]],
+        ["مراجعة الوحدة", "REVIEW", []],
+      ],
+    },
+    {
+      title: "الوحدة الثالثة (نموذج)",
+      lessons: [
+        ["نص الفهم القرائي الثالث", "READING", ["READ.ALOUD", "READ.COMP"]],
+        ["الصنف اللغوي: الفعل الماضي والمضارع والأمر", "LEXICAL", ["LEX.VERB_TENSE"]],
+        ["الوظيفة النحوية: الجملة الفعلية", "GRAMMAR", ["GRAM.VERBAL"]],
+        ["الرسم الإملائي: همزتا الوصل والقطع", "SPELLING", ["SPELL.HAMZA_START"]],
+        ["الأسلوب اللغوي: التعجب", "GRAMMAR", ["STYLE.EXCLAIM"]],
+        ["التواصل الكتابي", "WRITING", ["WRITE.EXPR"]],
+        ["مراجعة وتقويم", "REVIEW", []],
+      ],
+    },
+  ];
+  // توزيع درسين أسبوعياً على أسابيع الدراسة (تخطّي أسبوع الإجازة 9)
+  const teachWeeks = term1.weeks.filter((x) => x.number !== 9);
+  let slot = 0;
+  const today = new Date();
+  for (const [ui, u] of UNIT_PLAN.entries()) {
+    const unit = await prisma.unit.create({ data: { termId: term1.id, title: u.title, order: ui + 1 } });
+    for (const [li, [title, kind, skills]] of u.lessons.entries()) {
+      const week = teachWeeks[Math.min(Math.floor(slot / 2), teachWeeks.length - 1)];
+      slot++;
+      const past = week.end < today;
+      await prisma.lesson.create({
+        data: {
+          unitId: unit.id,
+          order: li + 1,
+          title,
+          kind,
+          periods: kind === "READING" ? 2 : 1,
+          weekId: week.id,
+          // لتوضيح مؤشر التغطية: معظم الدروس الماضية منفّذة ودرسان متأخران
+          status: past && slot % 7 !== 0 ? "DONE" : "PLANNED",
+          skills: { create: skills.map((c) => ({ skillId: skillId[c] })) },
+        },
+      });
+    }
+  }
 
   const classes = [];
   for (const section of ["أ", "ب", "ج"]) {
@@ -136,6 +208,7 @@ async function main() {
           avatar: AVATARS[n % AVATARS.length],
           nationalIdEnc: encryptField(nationalId),
           nationalIdLast4: nationalId.slice(-4),
+          nationalIdHash: hashNationalId(nationalId),
           guardianName: `${FATHER[(n * 7) % FATHER.length]} ${FAMILY[(n * 5) % FAMILY.length]}`,
           guardianPhoneEnc: encryptField(`05${String(10000000 + n * 1237).slice(-8)}`),
           healthNotesEnc: n % 9 === 0 ? encryptField("تستخدم نظارة طبية — تُجلس في الصفوف الأمامية") : null,
@@ -146,6 +219,48 @@ async function main() {
       n++;
     }
   }
+
+  // ---------- حضور آخر 10 أيام دراسية لفصل 4/أ + أحداث نموذجية ----------
+  const teacher = await prisma.user.findUniqueOrThrow({ where: { email: "teacher@school.sa" } });
+  const aStudents = await prisma.student.findMany({ where: { classId: A.id }, orderBy: { fullName: "asc" } });
+  const days: Date[] = [];
+  for (let d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1)); days.length < 10; d.setUTCDate(d.getUTCDate() - 1)) {
+    if (d.getUTCDay() <= 4) days.push(new Date(d));
+  }
+  for (const [di, day] of days.entries()) {
+    await prisma.attendance.createMany({
+      data: aStudents.map((s, si) => ({
+        studentId: s.id,
+        date: day,
+        period: 0,
+        // الطالبة الثالثة غائبة آخر 3 أيام لتوضيح تنبيه الغياب المتتالي
+        status: si === 2 && di < 3 ? "ABSENT" : (si * 7 + di) % 23 === 0 ? "LATE" : (si * 3 + di) % 29 === 0 ? "EXCUSED" : "PRESENT",
+        recordedBy: teacher.id,
+      })),
+    });
+  }
+  const addDays = (n: number) => new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + n));
+  /** اليوم الدراسي رقم n بعد اليوم (يتخطى الجمعة والسبت) */
+  const schoolDay = (n: number) => {
+    const d = addDays(0);
+    while (n > 0) {
+      d.setUTCDate(d.getUTCDate() + 1);
+      if (d.getUTCDay() <= 4) n--;
+    }
+    return d;
+  };
+  for (const cls of [A, B]) {
+    await prisma.calendarEvent.createMany({
+      data: [
+        { classId: cls.id, type: "QUIZ", title: "اختبار قصير: الوحدة الثانية", date: schoolDay(3), createdBy: teacher.id },
+        { classId: cls.id, type: "HOMEWORK", title: "واجب: كتابة فقرة عن المدرسة", date: schoolDay(1), createdBy: teacher.id },
+        { classId: cls.id, type: "ACTIVITY", title: "مسابقة القراءة الجهرية", date: schoolDay(6), createdBy: teacher.id },
+      ],
+    });
+  }
+  await prisma.behaviorRecord.createMany({
+    data: aStudents.slice(0, 4).map((s, i) => ({ studentId: s.id, date: addDays(-i - 1), category: i === 3 ? "نظام وانضباط" : "مشاركة", positive: i !== 3, points: i === 3 ? 1 : 2, recordedBy: teacher.id })),
+  });
 
   console.log("✅ تمت التعبئة\n");
   console.log("حسابات الطاقم (سيُطلب تفعيل التحقق الثنائي عند أول دخول):");

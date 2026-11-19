@@ -247,7 +247,11 @@ model CalendarEvent {
   date            DateTime
   lessonId        String?
   assessmentId    String?
+  note            String?
   rescheduledFrom DateTime?
+  createdBy       String?
+
+  @@index([classId, date])
 }
 
 // =====================================================================
@@ -262,6 +266,7 @@ model Student {
   displayName      String // الاسم الأول الظاهر في شاشة الدخول
   nationalIdEnc    String? // مشفّر
   nationalIdLast4  String? // لعرض مُقنَّع
+  nationalIdHash   String?     @unique // HMAC للبحث ومنع التكرار دون فك التشفير
   birthDate        DateTime?   @db.Date
   guardianName     String?
   guardianPhoneEnc String?
@@ -306,6 +311,7 @@ model Attendance {
   recordedBy String
 
   @@unique([studentId, date, period])
+  @@index([date])
 }
 
 model BehaviorRecord {
@@ -346,9 +352,11 @@ model StudentFile {
   fileName   String
   mime       String
   size       Int
-  category   String
+  category   String // WORK | AUDIO | CERTIFICATE | MEDICAL | OTHER
   uploadedBy String
   createdAt  DateTime @default(now())
+
+  @@index([studentId])
 }
 
 // =====================================================================
