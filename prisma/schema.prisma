@@ -481,6 +481,7 @@ enum QStatus {
 
 model Question {
   id         String   @id @default(cuid())
+  schoolId   String? // null = بنك مشترك (مستقبلاً)
   lessonId   String?
   lesson     Lesson?  @relation(fields: [lessonId], references: [id])
   skillId    String?
@@ -493,10 +494,15 @@ model Question {
   difficulty Int      @default(1)
   bloom      String?
   mediaUrl   String?
-  parentId   String?
+  parentId   String? // أسئلة فرعية لنص فهم مقروء
   status     QStatus  @default(APPROVED)
+  archived   Boolean  @default(false)
   createdBy  String
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([skillId, type])
+  @@index([parentId])
 }
 
 enum AssessmentKind {
@@ -516,9 +522,28 @@ model Assessment {
   blueprint   Json?
   durationMin Int?
   publishedAt DateTime?
+  instructions String?
   createdBy   String
   createdAt   DateTime            @default(now())
   versions    AssessmentVersion[]
+  publications AssessmentPublication[]
+}
+
+/// نشر اختبار لفصل: نافذة زمنية + عمود في سجل الدرجات تُنقل إليه النتائج آلياً
+model AssessmentPublication {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  classId      String
+  gradeItemId  String?
+  mode         String     @default("ONLINE") // ONLINE | PAPER
+  opensAt      DateTime
+  closesAt     DateTime?
+  createdBy    String
+  createdAt    DateTime   @default(now())
+  attempts     Attempt[]
+
+  @@unique([assessmentId, classId])
 }
 
 model AssessmentVersion {
@@ -534,7 +559,10 @@ model AssessmentVersion {
 }
 
 model Attempt {
-  id          String            @id @default(cuid())
+  id            String                 @id @default(cuid())
+  publicationId String?
+  publication   AssessmentPublication? @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  manualScores  Json? // {questionId: score} للأسئلة المفتوحة
   versionId   String
   version     AssessmentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   studentId   String
@@ -546,6 +574,8 @@ model Attempt {
   startedAt   DateTime          @default(now())
   submittedAt DateTime?
   gradedBy    String?
+
+  @@unique([publicationId, studentId])
 }
 
 // =====================================================================

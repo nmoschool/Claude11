@@ -7,6 +7,8 @@
 import { PrismaClient, Role, type LessonKind } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { encryptField, hashNationalId } from "../src/lib/crypto";
+import { validateQuestion, type QType } from "../src/lib/questionTypes";
+import { versionOrder } from "../src/lib/generator";
 import { randomJoinCode, randomPictureCode, serializeCode, codeToLabels, AVATARS } from "../src/lib/pictureCode";
 
 const prisma = new PrismaClient();
@@ -335,6 +337,127 @@ async function main() {
       });
     }
   }
+
+  // ---------- بنك أسئلة نموذجي + مفردات للمولّد القواعدي ----------
+  const lessonFor = async (skill: string) =>
+    (await prisma.lesson.findFirst({ where: { unit: { termId: term1.id }, skills: { some: { skill: { code: skill } } } }, orderBy: { order: "asc" } }))?.id ?? null;
+  type QSeed = { type: QType; skill: string; stem: string; payload?: object; key: object; points?: number; difficulty?: number; children?: QSeed[] };
+  const BANK: QSeed[] = [
+    { type: "MCQ", skill: "SPELL.SHAMS_QAMAR", stem: "الكلمة التي فيها لام شمسية:", payload: { options: ["القمر", "الشمس", "الكتاب", "الباب"] }, key: { correct: 1 } },
+    { type: "CLASSIFY", skill: "SPELL.SHAMS_QAMAR", stem: "صنّفي الكلمات الآتية حسب نوع اللام:", payload: { buckets: ["لام شمسية", "لام قمرية"], items: ["الشجرة", "النهر", "الورد", "القلم", "البحر", "الدرس"] }, key: { bucketOf: [0, 0, 1, 1, 1, 0] }, points: 3 },
+    { type: "TRUE_FALSE", skill: "SPELL.SHAMS_QAMAR", stem: "اللام في كلمة «الزهرة» لام قمرية.", key: { correct: false } },
+    { type: "FILL_BLANK", skill: "SPELL.TAA", stem: "أكملي بالتاء المناسبة: ذهبتُ إلى المدرسـ____ مبكرًا.", key: { accepted: ["ة"], mode: "spelling" } },
+    { type: "CLASSIFY", skill: "SPELL.TAA", stem: "صنّفي الكلمات الآتية حسب نوع التاء في آخرها:", payload: { buckets: ["تاء مربوطة", "تاء مفتوحة"], items: ["شجرة", "بنت", "سيارة", "بيت", "حديقة", "كتبتْ"] }, key: { bucketOf: [0, 1, 0, 1, 0, 1] }, points: 3 },
+    { type: "MCQ", skill: "SPELL.TAA", stem: "الكلمة المكتوبة كتابة صحيحة:", payload: { options: ["قطه", "قطة", "قطت"] }, key: { correct: 1 } },
+    { type: "DICTATION", skill: "SPELL.TAA", stem: "اكتبي الكلمة التي تسمعينها:", payload: { say: "حديقة" }, key: { accepted: ["حديقة"], mode: "spelling" }, difficulty: 2 },
+    { type: "MCQ", skill: "SPELL.HAMZA_START", stem: "الكلمة التي تبدأ بهمزة قطع:", payload: { options: ["استمع", "أكل", "انطلق", "اكتب"] }, key: { correct: 1 }, difficulty: 2 },
+    { type: "DICTATION", skill: "SPELL.HAMZA_START", stem: "اكتبي الكلمة التي تسمعينها:", payload: { say: "أرنب" }, key: { accepted: ["أرنب"], mode: "spelling" } },
+    { type: "DICTATION", skill: "SPELL.ALIF_LAYYINA", stem: "اكتبي الكلمة التي تسمعينها:", payload: { say: "مستشفى" }, key: { accepted: ["مستشفى"], mode: "spelling" }, difficulty: 2 },
+    { type: "FILL_BLANK", skill: "LEX.PRONOUN", stem: "أكملي بالضمير المناسب (هو / هي): ____ طالبةٌ مجتهدةٌ.", key: { accepted: ["هي"], mode: "lenient" } },
+    { type: "MATCHING", skill: "LEX.PRONOUN", stem: "صِلي كل ضمير بما يدل عليه:", payload: { left: ["هو", "هي", "هم", "أنتِ"], right: ["لجماعة الذكور الغائبين", "للمفرد المذكر الغائب", "للمفردة المؤنثة المخاطبة", "للمفردة المؤنثة الغائبة"] }, key: { pairs: [1, 3, 0, 2] }, points: 2, difficulty: 2 },
+    { type: "MCQ", skill: "LEX.DEMONSTRATIVE", stem: "اسم الإشارة المناسب: ____ القصةُ ممتعةٌ.", payload: { options: ["هذا", "هذه", "هؤلاء", "هذان"] }, key: { correct: 1 } },
+    { type: "TRANSFORM", skill: "LEX.NUMBER", stem: "حوّلي كلمة «كتاب» إلى المثنى:", payload: { source: "كتاب" }, key: { accepted: ["كتابان", "كتابين"], mode: "lenient" } },
+    { type: "TRANSFORM", skill: "LEX.NUMBER", stem: "حوّلي كلمة «معلمة» إلى الجمع:", payload: { source: "معلمة" }, key: { accepted: ["معلمات"], mode: "lenient" }, difficulty: 2 },
+    { type: "MCQ", skill: "LEX.NUMBER", stem: "مثنى كلمة «شجرة»:", payload: { options: ["شجرات", "شجرتان", "أشجار", "شجيرة"] }, key: { correct: 1 } },
+    { type: "CLASSIFY", skill: "LEX.VERB_TENSE", stem: "صنّفي الأفعال الآتية:", payload: { buckets: ["ماضٍ", "مضارع", "أمر"], items: ["كتبَ", "يقرأُ", "اسمعْ", "لعبتْ", "تذهبُ", "ارسمي"] }, key: { bucketOf: [0, 1, 2, 0, 1, 2] }, points: 3, difficulty: 2 },
+    { type: "EXTRACT", skill: "LEX.VERB_TENSE", stem: "استخرجي من النص فعلين مضارعين:", payload: { passage: "تستيقظُ سارةُ مبكرةً، فتتوضأُ وتصلي، ثم تتناولُ فطورَها وتذهبُ إلى المدرسةِ." }, key: { accepted: ["تستيقظ", "تتوضأ", "تصلي", "تتناول", "تذهب"], count: 2, mode: "lenient" }, points: 2 },
+    { type: "MCQ", skill: "GRAM.NOMINAL", stem: "الجملة الاسمية فيما يأتي:", payload: { options: ["ذهبَ أحمدُ إلى السوقِ", "الحديقةُ جميلةٌ", "يلعبُ الطفلُ بالكرةِ", "اكتبي الدرسَ"] }, key: { correct: 1 } },
+    { type: "TRUE_FALSE", skill: "GRAM.NOMINAL", stem: "«السماءُ صافيةٌ» جملة اسمية.", key: { correct: true } },
+    { type: "MCQ", skill: "GRAM.NOMINAL", stem: "المبتدأ في جملة «العلمُ نورٌ» هو:", payload: { options: ["العلم", "نور", "الجملة كلها"] }, key: { correct: 0 }, difficulty: 2 },
+    { type: "ORDER_WORDS", skill: "GRAM.VERBAL", stem: "رتّبي الكلمات لتكوّني جملة مفيدة:", payload: { words: ["إلى", "ذهبَ", "المدرسةِ", "محمدٌ"] }, key: { sentences: [["ذهبَ", "محمدٌ", "إلى", "المدرسةِ"], ["محمدٌ", "ذهبَ", "إلى", "المدرسةِ"]] }, points: 2 },
+    { type: "MCQ", skill: "GRAM.VERBAL", stem: "الفاعل في جملة «قرأتْ هندُ القصةَ» هو:", payload: { options: ["قرأتْ", "هندُ", "القصةَ"] }, key: { correct: 1 }, difficulty: 2 },
+    { type: "MCQ", skill: "STYLE.EXCLAIM", stem: "أسلوب التعجب فيما يأتي:", payload: { options: ["ما أجملَ السماءَ!", "ما اسمُكِ؟", "يا سارةُ، أقبلي", "لا تهملي واجبكِ"] }, key: { correct: 0 } },
+    { type: "CLASSIFY", skill: "STYLE.QUESTION", stem: "صنّفي الجمل حسب الأسلوب:", payload: { buckets: ["استفهام", "نداء", "تعجب"], items: ["هل حفظتِ الدرسَ؟", "يا فاطمةُ، اجتهدي", "ما أروعَ الربيعَ!", "أين الكتابُ؟", "يا معلمتي، شكرًا"] }, key: { bucketOf: [0, 1, 2, 0, 1] }, points: 2.5, difficulty: 2 },
+    { type: "OPEN", skill: "WRITE.EXPR", stem: "اكتبي ثلاث جمل عن مدرستكِ.", payload: { lines: 4 }, key: { rubric: "درجة لكل جملة مفيدة سليمة البناء", sample: "مدرستي جميلة. أحبّ معلماتي. ألعب مع صديقاتي في الفسحة." }, points: 3 },
+    { type: "MCQ", skill: "READ.COMP", stem: "ضدّ كلمة «نشيطة»:", payload: { options: ["كسولة", "سريعة", "جميلة"] }, key: { correct: 0 } },
+    {
+      type: "READING_PASSAGE",
+      skill: "READ.COMP",
+      stem: "اقرئي النص الآتي ثم أجيبي:",
+      payload: { passage: "تخرجُ النحلةُ في الصباحِ الباكرِ، فتطيرُ من زهرةٍ إلى زهرةٍ، تجمعُ الرحيقَ ثم تعودُ إلى الخليةِ. وفي الخليةِ يصنعُ النحلُ العسلَ، وهو غذاءٌ لذيذٌ ودواءٌ نافعٌ للناسِ. والنحلةُ لا تؤذي أحدًا إلا إذا شعرتْ بالخطرِ." },
+      key: {},
+      points: 0,
+      difficulty: 2,
+      children: [
+        { type: "MCQ", skill: "READ.COMP", stem: "تجمعُ النحلةُ من الأزهارِ:", payload: { options: ["العسل", "الرحيق", "الماء"] }, key: { correct: 1 } },
+        { type: "TRUE_FALSE", skill: "READ.COMP", stem: "العسلُ غذاءٌ ودواءٌ.", key: { correct: true } },
+        { type: "FILL_BLANK", skill: "READ.COMP", stem: "تعودُ النحلةُ إلى ____ بعد جمعِ الرحيقِ.", key: { accepted: ["الخلية", "خليتها"], mode: "lenient" } },
+        { type: "OPEN", skill: "READ.COMP", stem: "متى تؤذي النحلةُ الإنسانَ؟", payload: { lines: 2 }, key: { sample: "إذا شعرت بالخطر." }, points: 2 },
+      ],
+    },
+  ];
+  const bankIds: Record<string, string> = {};
+  const addQ = async (q: QSeed, parentId: string | null = null): Promise<string> => {
+    const checked = validateQuestion(q.type, q.stem, q.payload ?? {}, q.key);
+    const row = await prisma.question.create({
+      data: {
+        schoolId: school.id,
+        type: q.type,
+        stem: q.stem,
+        payload: checked.payload,
+        answerKey: checked.answerKey,
+        points: q.points ?? 1,
+        difficulty: q.difficulty ?? 1,
+        skillId: skillId[q.skill],
+        lessonId: await lessonFor(q.skill),
+        parentId,
+        createdBy: teacher.id,
+      },
+    });
+    for (const c of q.children ?? []) await addQ(c, row.id);
+    return row.id;
+  };
+  for (const q of BANK) bankIds[q.stem] = await addQ(q);
+
+  const vocabLesson = await lessonFor("SPELL.SHAMS_QAMAR");
+  const numLesson = await lessonFor("LEX.NUMBER");
+  const VOCAB: { word: string; meaning?: string; antonym?: string; dual?: string; plural?: string; lesson: string | null }[] = [
+    { word: "الشمس", lesson: vocabLesson }, { word: "القمر", lesson: vocabLesson }, { word: "النهر", lesson: vocabLesson },
+    { word: "الباب", lesson: vocabLesson }, { word: "الزهرة", lesson: vocabLesson }, { word: "الكتاب", lesson: vocabLesson },
+    { word: "الدرس", lesson: vocabLesson }, { word: "المعلمة", lesson: vocabLesson }, { word: "السماء", lesson: vocabLesson },
+    { word: "الحديقة", lesson: vocabLesson }, { word: "الطريق", lesson: vocabLesson }, { word: "الفصل", lesson: vocabLesson },
+    { word: "مدرسة", dual: "مدرستان", plural: "مدارس", lesson: numLesson },
+    { word: "بنت", dual: "بنتان", plural: "بنات", lesson: numLesson },
+    { word: "شجرة", dual: "شجرتان", plural: "أشجار", lesson: numLesson },
+    { word: "بيت", dual: "بيتان", plural: "بيوت", lesson: numLesson },
+    { word: "سيارة", dual: "سيارتان", plural: "سيارات", lesson: numLesson },
+    { word: "صوت", dual: "صوتان", plural: "أصوات", lesson: numLesson },
+    { word: "نشيط", antonym: "كسول", meaning: "كثير العمل والحركة", lesson: vocabLesson },
+    { word: "طويل", antonym: "قصير", meaning: "ممتدّ في الطول", lesson: vocabLesson },
+    { word: "فرِح", antonym: "حزين", meaning: "مسرور سعيد", lesson: vocabLesson },
+    { word: "نظيف", antonym: "متّسخ", meaning: "خالٍ من الوسخ", lesson: vocabLesson },
+    { word: "الرحيق", meaning: "سائل حلو في الأزهار", lesson: vocabLesson },
+    { word: "الخلية", meaning: "بيت النحل", lesson: vocabLesson },
+  ];
+  await prisma.vocabItem.createMany({ data: VOCAB.filter((v) => v.lesson).map((v) => ({ lessonId: v.lesson!, word: v.word, meaning: v.meaning, antonym: v.antonym, dual: v.dual, plural: v.plural, tags: [] })) });
+
+  // اختبار نموذجي بنموذجين، منشور إلكترونياً لفصل 4/أ ومربوط بسجل الدرجات
+  const quizIds = [
+    "الكلمة التي فيها لام شمسية:", "صنّفي الكلمات الآتية حسب نوع اللام:", "أكملي بالتاء المناسبة: ذهبتُ إلى المدرسـ____ مبكرًا.",
+    "صنّفي الكلمات الآتية حسب نوع التاء في آخرها:", "الكلمة التي تبدأ بهمزة قطع:", "اكتبي ثلاث جمل عن مدرستكِ.",
+  ].map((st) => bankIds[st]);
+  const qSeed = 424242;
+  const quiz = await prisma.assessment.create({
+    data: {
+      kind: "QUIZ",
+      title: "اختبار قصير: الرسم الإملائي",
+      termId: term1.id,
+      durationMin: 20,
+      instructions: "اقرئي كل سؤال جيدًا قبل الإجابة.",
+      createdBy: teacher.id,
+      versions: {
+        create: [0, 1].map((i) => ({ label: ["أ", "ب"][i], shuffleSeed: qSeed + i * 104729, questionIds: versionOrder(quizIds, {}, qSeed, i) })),
+      },
+    },
+  });
+  const quizTotal = 1 + 3 + 1 + 3 + 1 + 3;
+  const quizItem = await prisma.gradeItem.create({
+    data: { classId: A.id, termId: term1.id, componentId: comp("QUIZ"), title: quiz.title, maxScore: quizTotal, date: today, assessmentId: quiz.id, skillIds: ["SPELL.SHAMS_QAMAR", "SPELL.TAA", "SPELL.HAMZA_START", "WRITE.EXPR"].map((c) => skillId[c]), createdBy: teacher.id },
+  });
+  await prisma.assessmentPublication.create({
+    data: { assessmentId: quiz.id, classId: A.id, gradeItemId: quizItem.id, mode: "ONLINE", opensAt: addDays(-1), closesAt: addDays(7), createdBy: teacher.id },
+  });
+  await prisma.assessment.update({ where: { id: quiz.id }, data: { publishedAt: new Date() } });
 
   console.log("✅ تمت التعبئة\n");
   console.log("حسابات الطاقم (سيُطلب تفعيل التحقق الثنائي عند أول دخول):");

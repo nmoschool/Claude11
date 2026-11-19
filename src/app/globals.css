@@ -111,3 +111,8 @@ body {
 .print-sheet h2 {
   break-after: avoid;
 }
+
+/* ورقة الاختبار: لا ينقسم السؤال بين صفحتين */
+.assessment-sheet li {
+  break-inside: avoid;
+}

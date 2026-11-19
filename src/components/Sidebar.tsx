@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/curriculum", label: "توزيع المنهج", icon: "🗓️", perm: "curriculum:read" },
   { href: "/dashboard/gradebook", label: "سجل الدرجات", icon: "📊", perm: "grades:read" },
   { href: "/dashboard/reports", label: "التقارير", icon: "📈", perm: "reports:read" },
-  { href: "/dashboard/assessments", label: "أوراق العمل والاختبارات", icon: "📝", perm: "assessments:read", phase: 4 },
+  { href: "/dashboard/assessments", label: "أوراق العمل والاختبارات", icon: "📝", perm: "assessments:read" },
   { href: "/dashboard/games", label: "الألعاب التعليمية", icon: "🎮", perm: "reports:read", phase: 5 },
   { href: "/dashboard/admin/users", label: "المستخدمون والصلاحيات", icon: "🔐", perm: "users:manage" },
   { href: "/dashboard/audit", label: "سجل التدقيق", icon: "🧾", perm: "audit:read" },

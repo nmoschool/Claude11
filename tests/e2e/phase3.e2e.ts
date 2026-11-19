@@ -31,7 +31,7 @@ test("السجل: الحساب على الخادم يطابق دوال الحس�
   const { status, data } = await gb(T);
   assert.equal(status, 200);
   assert.equal(data.rows.length, await prisma.student.count({ where: { classId: A, archived: false } }));
-  assert.equal(data.items.length, 12);
+  assert.equal(data.items.length, await prisma.gradeItem.count({ where: { classId: A, termId: term } }));
   for (const r of data.rows) {
     const entries = Object.entries(r.cells).map(([itemId, c]: [string, any]) => ({ itemId, ...c }));
     const expect = studentResult(data.scheme.components, data.items, entries, { scale: data.scheme.gradeScale, absentAsZero: true });
