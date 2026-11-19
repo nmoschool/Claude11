@@ -141,6 +141,8 @@ model SchoolClass {
   grade    Int             @default(4)
   section  String // "أ"
   joinCode String          @unique // رمز الفصل لدخول الطالبات
+  leaderboardVisible Boolean  @default(true) // لوحة الشرف في واجهة الطالبات
+  disabledGames      String[] // رموز الألعاب المعطّلة لهذا الفصل
   students Student[]
   staff    ClassStaff[]
   events   CalendarEvent[]
@@ -613,10 +615,11 @@ model GameAttempt {
   ms        Int
   level     Int
   points    Int
-  clientId  String   @unique
+  clientId  String   @unique // معرّف من جهاز الطالبة: يمنع التكرار عند المزامنة بعد اللعب دون اتصال
+  playedAt  DateTime @default(now()) // وقت اللعب الفعلي (قد يسبق المزامنة)
   createdAt DateTime @default(now())
 
-  @@index([studentId, createdAt])
+  @@index([studentId, playedAt])
   @@index([skillCode])
 }
 
@@ -643,7 +646,10 @@ model Certificate {
   id         String   @id @default(cuid())
   studentId  String
   student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  kind       String   @default("MANUAL") // LEVEL | BADGE | MANUAL
+  ref        String? // رمز المستوى أو الوسام
   title      String
+  reason     String?
   verifyCode String   @unique
   pdfKey     String?
   issuedBy   String

@@ -6,9 +6,9 @@ import StudentSignOut from "@/components/StudentSignOut";
 
 const TILES = [
   { icon: "📒", title: "واجباتي", color: "from-mint-500 to-mint-700", href: "/student/assessments" },
-  { icon: "🎮", title: "ألعابي", color: "from-brand-400 to-brand-600" },
-  { icon: "⭐", title: "نقاطي وأوسمتي", color: "from-amber-300 to-amber-500" },
-  { icon: "🏅", title: "شهاداتي", color: "from-accent-400 to-accent-600" },
+  { icon: "🎮", title: "ألعابي", color: "from-brand-400 to-brand-600", href: "/student/games" },
+  { icon: "⭐", title: "نقاطي وأوسمتي", color: "from-amber-300 to-amber-500", href: "/student/progress" },
+  { icon: "🏅", title: "شهاداتي", color: "from-accent-400 to-accent-600", href: "/student/certificates" },
 ] as { icon: string; title: string; color: string; href?: string }[];
 
 export default async function StudentHome() {

@@ -20,7 +20,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/gradebook", label: "سجل الدرجات", icon: "📊", perm: "grades:read" },
   { href: "/dashboard/reports", label: "التقارير", icon: "📈", perm: "reports:read" },
   { href: "/dashboard/assessments", label: "أوراق العمل والاختبارات", icon: "📝", perm: "assessments:read" },
-  { href: "/dashboard/games", label: "الألعاب التعليمية", icon: "🎮", perm: "reports:read", phase: 5 },
+  { href: "/dashboard/games", label: "الألعاب التعليمية", icon: "🎮", perm: "reports:read" },
   { href: "/dashboard/admin/users", label: "المستخدمون والصلاحيات", icon: "🔐", perm: "users:manage" },
   { href: "/dashboard/audit", label: "سجل التدقيق", icon: "🧾", perm: "audit:read" },
   { href: "/dashboard/account/security", label: "حسابي والأمان", icon: "🛡️" },

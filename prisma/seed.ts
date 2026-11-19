@@ -9,6 +9,10 @@ import bcrypt from "bcryptjs";
 import { encryptField, hashNationalId } from "../src/lib/crypto";
 import { validateQuestion, type QType } from "../src/lib/questionTypes";
 import { versionOrder } from "../src/lib/generator";
+import { BADGES, LEVELS, bestStreak, earnedBadges, levelFor, longestDayStreak, scoreBatch } from "../src/lib/gamification";
+import { GAMES, GAME_CODES } from "../src/lib/games";
+import { AL_WORDS, TAA_WORDS, NUMBER_WORDS } from "../src/lib/gameWords";
+import { randomUUID } from "crypto";
 import { randomJoinCode, randomPictureCode, serializeCode, codeToLabels, AVATARS } from "../src/lib/pictureCode";
 
 const prisma = new PrismaClient();
@@ -458,6 +462,57 @@ async function main() {
     data: { assessmentId: quiz.id, classId: A.id, gradeItemId: quizItem.id, mode: "ONLINE", opensAt: addDays(-1), closesAt: addDays(7), createdBy: teacher.id },
   });
   await prisma.assessment.update({ where: { id: quiz.id }, data: { publishedAt: new Date() } });
+
+  // ---------- الألعاب: الأوسمة + لعب نموذجي لفصل 4/أ خلال آخر 10 أيام ----------
+  for (const b of BADGES) await prisma.badge.create({ data: { code: b.code, title: b.title, icon: b.icon, rule: { desc: b.desc } } });
+  const badgeId = Object.fromEntries((await prisma.badge.findMany()).map((b) => [b.code, b.id]));
+  const players = (await prisma.student.findMany({ where: { classId: A.id }, orderBy: { fullName: "asc" } })).slice(0, 9);
+  const refs: Record<string, string[]> = {
+    SHAMS_GARDEN: AL_WORDS.map((w) => `b:${w}`),
+    TAA_CATCHER: TAA_WORDS.map((w) => `b:${w}`),
+    NUMBER_FACTORY: NUMBER_WORDS.map((n) => `b:${n.word}:dual`),
+    SENTENCE_TRAIN: ["s:0", "s:1", "s:4", "s:5", "s:7"],
+    MEMORY_CARDS: ["b:طويل", "b:كبير", "b:ليل", "b:صعب"],
+    ECHO_DICTATION: ["b:بيت", "b:مدرسة", "b:أرنب", "b:مستشفى"],
+  };
+  for (const [pi, st] of players.entries()) {
+    const skill = 0.45 + (pi % 5) * 0.11;
+    const rows: { gameCode: string; skillCode: string; itemRef: string; correct: boolean; hintsUsed: number; ms: number; level: number; playedAt: Date }[] = [];
+    for (let day = 9; day >= 0; day--) {
+      if ((pi + day) % 3 === 0 && pi > 1) continue; // بعضهن لا يلعبن كل يوم
+      const game = GAME_CODES[(pi + day) % (pi === 0 ? 6 : 3)];
+      for (let k = 0; k < 10; k++) {
+        const pool = refs[game];
+        const ref = pool[(k * 7 + day + pi) % pool.length];
+        // «حديقة» و«مستشفى» أصعب لتظهرا في «أصعب العناصر»
+        const hard = /مستشفى|حديقة|ثبات/.test(ref) ? 0.3 : 0;
+        rows.push({
+          gameCode: game,
+          skillCode: GAMES[game].skill,
+          itemRef: ref,
+          correct: rnd() < skill - hard + day * 0.012,
+          hintsUsed: rnd() < 0.15 ? 1 : 0,
+          ms: 2500 + Math.floor(rnd() * 6000),
+          level: 1 + Math.min(2, Math.floor((10 - day) / 4)),
+          playedAt: new Date(Date.now() - day * 86_400_000 - (10 - k) * 40_000 - 3_600_000),
+        });
+      }
+    }
+    if (!rows.length) continue;
+    const { points } = scoreBatch(rows);
+    await prisma.gameAttempt.createMany({ data: rows.map((r, i) => ({ ...r, studentId: st.id, points: points[i], clientId: randomUUID() })) });
+    const total = points.reduce((a, b) => a + b, 0);
+    await prisma.student.update({ where: { id: st.id }, data: { points: total } });
+    const prefix: Record<string, number> = {};
+    rows.forEach((r) => r.correct && (prefix[r.skillCode.split(".")[0]] = (prefix[r.skillCode.split(".")[0]] ?? 0) + 1));
+    const day = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(d);
+    for (const code of earnedBadges({ totalAttempts: rows.length, correctBySkillPrefix: prefix, bestStreak: bestStreak(rows.map((r) => r.correct)), consecutiveDays: longestDayStreak(rows.map((r) => day(r.playedAt))), improvedSkills: [], gamesPlayed: new Set(rows.map((r) => r.gameCode)).size })) {
+      await prisma.studentBadge.create({ data: { studentId: st.id, badgeId: badgeId[code] } });
+    }
+    for (const L of LEVELS.slice(1, levelFor(total).index + 1)) {
+      await prisma.certificate.create({ data: { studentId: st.id, kind: "LEVEL", ref: L.code, title: `شهادة بلوغ مستوى «${L.title}» ${L.icon}`, reason: `جمعت ${L.min} نقطة في ألعاب لغتي`, verifyCode: randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), issuedBy: "system" } });
+    }
+  }
 
   console.log("✅ تمت التعبئة\n");
   console.log("حسابات الطاقم (سيُطلب تفعيل التحقق الثنائي عند أول دخول):");
